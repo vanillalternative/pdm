@@ -20,6 +20,7 @@ const (
 	FormatText     Format = "text"
 	FormatJSON     Format = "json"
 	FormatMarkdown Format = "markdown"
+	FormatHTML     Format = "html"
 )
 
 // ParseFormat validates and normalizes a format string.
@@ -31,8 +32,10 @@ func ParseFormat(s string) (Format, error) {
 		return FormatJSON, nil
 	case "markdown", "md":
 		return FormatMarkdown, nil
+	case "html":
+		return FormatHTML, nil
 	default:
-		return "", fmt.Errorf("unknown format %q (use text, json, or markdown)", s)
+		return "", fmt.Errorf("unknown format %q (use text, json, markdown, or html)", s)
 	}
 }
 

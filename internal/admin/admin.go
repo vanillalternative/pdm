@@ -55,6 +55,18 @@ func (r *Resolver) ResolvePoint(lon, lat float64) (string, bool) {
 	return "", false
 }
 
+// BoundaryAt returns the boundary geometry of the municipality containing the
+// point (for map rendering), or ok=false if the point is outside all boundaries.
+func (r *Resolver) BoundaryAt(lon, lat float64) (geom.Geometry, bool) {
+	pt := spatial.Point(lon, lat)
+	for _, f := range r.features {
+		if spatial.Intersects(pt, f.Geometry) {
+			return f.Geometry, true
+		}
+	}
+	return geom.Geometry{}, false
+}
+
 // Overlap describes how much of an input polygon falls in a municipality.
 type Overlap struct {
 	Municipality string

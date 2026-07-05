@@ -59,7 +59,7 @@ Options:
 
 | flag | meaning |
 |---|---|
-| `--format text\|json\|markdown` | output format (default `text`) |
+| `--format text\|json\|markdown\|html` | output format (default `text`) |
 | `--live` | fetch fresh data from the official geoservices (falls back to bundled) |
 | `--no-cache` | do not read/write the local cache |
 | `--cache-dir <dir>` | override the cache directory |
@@ -76,7 +76,17 @@ pdm point 39.60 -8.41
 pdm polygon ./testdata/parcel.geojson
 pdm report ./testdata/parcel-large.geojson --format json
 pdm report 39.60 -8.41 --format markdown
+pdm point 39.60 -8.41 --format html > report.html   # standalone page + map
 ```
+
+### HTML report
+
+`--format html` writes a complete, self-contained HTML page to stdout: a
+locator **map** (inline SVG — municipality boundary, the zoning polygon, nearby
+constraint zones colour-coded, and the point/parcel), followed by the zoning,
+constraint chips (yes/no), the applicable regulation articles (collapsible, with
+full text), sources, and the disclaimer. It's theme-aware and needs no network
+or assets — open it in any browser or share the file.
 
 Point output:
 
@@ -163,6 +173,7 @@ internal/
   admin            coordinate/polygon → municipality (CAOP boundaries)
   registry         municipality → adapter; "supported" set
   reg              Regulamento articles + zoning-category → article retrieval
+  mapview          projects geometries to an inline SVG locator map
   adapter          per-municipality contract (Adapter interface)
     tomar          the pilot adapter
   source           data loaders: bundled / file / WFS / OGC API Features + cache

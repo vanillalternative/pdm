@@ -1,0 +1,303 @@
+package report
+
+import (
+	"fmt"
+	"io"
+	"strings"
+
+	"github.com/bernardosimoes/pdm/internal/model"
+)
+
+// PointHTML writes a complete, self-contained HTML report for a point result,
+// embedding the given map figure (inline SVG produced by the mapview package).
+func PointHTML(w io.Writer, r *model.PointResult, mapFigure string) error {
+	b := &strings.Builder{}
+	title := fmt.Sprintf("PDM %s — %.5f, %.5f", h(r.Municipality), r.Input.Lat, r.Input.Lon)
+	head(b, title)
+
+	fmt.Fprintf(b, `<div class="eyebrow">%s%s</div>`, planEyebrow(r.Plan), confidenceChip(r.Confidence))
+	fmt.Fprintf(b, `<h1>%.5f, %.5f</h1>`, r.Input.Lat, r.Input.Lon)
+	fmt.Fprintf(b, `<p class="lede">Municipality of <strong>%s</strong>%s.</p>`, h(r.Municipality), planLede(r.Plan))
+
+	if !r.Supported {
+		notesHTML(b, r.Notes)
+		disclaimerHTML(b, r.Disclaimer)
+		return tail(w, b)
+	}
+	if mapFigure != "" {
+		b.WriteString(mapFigure)
+	}
+
+	// Zoning
+	b.WriteString(`<section><h2>Zoning</h2>`)
+	if len(r.Zoning) == 0 {
+		b.WriteString(`<p class="muted">No zoning category matched.</p>`)
+	}
+	for _, z := range r.Zoning {
+		fmt.Fprintf(b, `<div class="zrow"><span class="ztag">%s</span><span class="zsub">%s</span></div>`, h(zHead(z)), h(z.Subclass))
+	}
+	b.WriteString(`</section>`)
+
+	// Constraints
+	b.WriteString(`<section><h2>Constraints</h2><div class="chips">`)
+	for _, c := range r.Constraints {
+		chip(b, c.Type, c.Present, c.Detail, "")
+	}
+	b.WriteString(`</div></section>`)
+
+	regulationHTML(b, r.Regulation)
+	sourcesHTML(b, r.Sources)
+	notesHTML(b, r.Notes)
+	disclaimerHTML(b, r.Disclaimer)
+	return tail(w, b)
+}
+
+// PolygonHTML writes a complete, self-contained HTML report for a polygon result.
+func PolygonHTML(w io.Writer, r *model.PolygonResult, mapFigure string) error {
+	b := &strings.Builder{}
+	head(b, fmt.Sprintf("PDM %s — parcel", h(r.Municipality)))
+
+	fmt.Fprintf(b, `<div class="eyebrow">%s%s</div>`, planEyebrow(r.Plan), confidenceChip(r.Confidence))
+	b.WriteString(`<h1>Parcel analysis</h1>`)
+	fmt.Fprintf(b, `<p class="lede">Municipality of <strong>%s</strong>%s · analysed area <strong>%s m²</strong>.</p>`,
+		h(r.Municipality), planLede(r.Plan), area(r.AnalysedAreaM2))
+
+	if !r.Supported {
+		notesHTML(b, r.Notes)
+		disclaimerHTML(b, r.Disclaimer)
+		return tail(w, b)
+	}
+	if mapFigure != "" {
+		b.WriteString(mapFigure)
+	}
+
+	b.WriteString(`<section><h2>Zoning</h2><table><thead><tr><th>Category</th><th class="num">Area</th><th class="num">%</th></tr></thead><tbody>`)
+	for _, z := range r.Zoning {
+		fmt.Fprintf(b, `<tr><td>%s</td><td class="num">%s m²</td><td class="num">%s%%</td></tr>`, h(z.Label), area(z.AreaM2), pct(z.Percent))
+	}
+	b.WriteString(`</tbody></table></section>`)
+
+	b.WriteString(`<section><h2>Constraints</h2><div class="chips">`)
+	for _, c := range r.Constraints {
+		extra := ""
+		if c.Present {
+			extra = fmt.Sprintf("%s m² · %s%%", area(c.AreaM2), pct(c.Percent))
+		}
+		chip(b, c.Type, c.Present, "", extra)
+	}
+	b.WriteString(`</div></section>`)
+
+	regulationHTML(b, r.Regulation)
+	sourcesHTML(b, r.Sources)
+	notesHTML(b, r.Notes)
+	disclaimerHTML(b, r.Disclaimer)
+	return tail(w, b)
+}
+
+// ---- shared building blocks ----
+
+func zHead(z model.ZoningHit) string {
+	if z.Class != "" {
+		return z.Class
+	}
+	return z.Label
+}
+
+func planEyebrow(p *model.PlanInfo) string {
+	if p == nil {
+		return "Planning query"
+	}
+	return h(p.Name)
+}
+
+func planLede(p *model.PlanInfo) string {
+	if p == nil || p.Name == "" {
+		return ""
+	}
+	return ", under the " + h(p.Name)
+}
+
+func confidenceChip(c model.Confidence) string {
+	return fmt.Sprintf(`<span class="conf conf-%s">confidence: %s</span>`, c, c)
+}
+
+func chip(b *strings.Builder, label string, present bool, detail, extra string) {
+	state := "no"
+	cls := "chip-no"
+	if present {
+		state, cls = "yes", "chip-yes"
+	}
+	fmt.Fprintf(b, `<div class="chip %s"><span class="chip-k">%s</span><span class="chip-v">%s</span>`, cls, h(label), state)
+	if detail != "" {
+		fmt.Fprintf(b, `<span class="chip-d">%s</span>`, h(detail))
+	}
+	if extra != "" {
+		fmt.Fprintf(b, `<span class="chip-d">%s</span>`, h(extra))
+	}
+	b.WriteString(`</div>`)
+}
+
+func regulationHTML(b *strings.Builder, reg *model.Regulation) {
+	if reg == nil {
+		return
+	}
+	b.WriteString(`<section><h2>Applicable regulation</h2>`)
+	b.WriteString(`<p class="muted">Articles matched to the zoning category — read them in full. Retrieval only, not an interpretation or legal advice.</p>`)
+	if reg.Reference != "" {
+		if reg.URL != "" {
+			fmt.Fprintf(b, `<p class="src-line">Source: <a href="%s">%s</a></p>`, h(reg.URL), h(reg.Reference))
+		} else {
+			fmt.Fprintf(b, `<p class="src-line">Source: %s</p>`, h(reg.Reference))
+		}
+	}
+	if len(reg.Articles) == 0 {
+		b.WriteString(`<p class="muted">No section-specific article matched; consult the full regulation.</p>`)
+	}
+	for _, a := range reg.Articles {
+		fmt.Fprintf(b, `<details class="art"><summary><span class="art-n">Art. %s</span> %s`, h(a.Number), h(a.Title))
+		if a.Section != "" {
+			fmt.Fprintf(b, ` <span class="art-s">%s</span>`, h(a.Section))
+		}
+		fmt.Fprintf(b, `</summary><div class="art-text">%s</div></details>`, h(a.Text))
+	}
+	b.WriteString(`</section>`)
+}
+
+func sourcesHTML(b *strings.Builder, sources []model.Source) {
+	b.WriteString(`<section><h2>Sources</h2><ul class="srcs">`)
+	for _, s := range sources {
+		line := h(s.Name)
+		if s.URL != "" {
+			line = fmt.Sprintf(`<a href="%s">%s</a>`, h(s.URL), h(s.Name))
+		}
+		fmt.Fprintf(b, `<li>%s <span class="prov">%s</span></li>`, line, h(string(s.Provenance)))
+	}
+	b.WriteString(`</ul></section>`)
+}
+
+func notesHTML(b *strings.Builder, notes []string) {
+	if len(notes) == 0 {
+		return
+	}
+	b.WriteString(`<section class="notes"><h2>Notes</h2><ul>`)
+	for _, n := range notes {
+		fmt.Fprintf(b, `<li>%s</li>`, h(n))
+	}
+	b.WriteString(`</ul></section>`)
+}
+
+func disclaimerHTML(b *strings.Builder, d string) {
+	if d == "" {
+		return
+	}
+	fmt.Fprintf(b, `<footer>%s</footer>`, h(d))
+}
+
+func h(s string) string {
+	r := strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;", `"`, "&quot;")
+	return r.Replace(s)
+}
+
+func head(b *strings.Builder, title string) {
+	b.WriteString("<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><title>")
+	b.WriteString(h(title))
+	b.WriteString("</title><style>")
+	b.WriteString(css)
+	b.WriteString("</style></head><body><main class=\"wrap\">")
+}
+
+func tail(w io.Writer, b *strings.Builder) error {
+	b.WriteString("</main></body></html>")
+	_, err := io.WriteString(w, b.String())
+	return err
+}
+
+const css = `
+:root{
+ --bg:#f2efe8;--panel:#faf8f3;--ink:#20303a;--muted:#6a7780;--hair:#ddd5c7;--accent:#2a7f9e;
+ --good:#2f7d5b;--good-bg:#e4f1ea;--warn:#b4562a;--warn-bg:#f6e7dd;
+ --c-boundary:#5a6a74;--c-zoning:#8a6fb0;--c-ran:#4e8a4a;--c-ren:#3f7fbf;--c-poacb:#2a8fa8;--c-subject:#d8442a;
+}
+@media (prefers-color-scheme:dark){:root{
+ --bg:#0d1418;--panel:#131e24;--ink:#e2e9ed;--muted:#93a4ac;--hair:#26343c;--accent:#3fa8c9;
+ --good:#57c491;--good-bg:#123024;--warn:#e6905e;--warn-bg:#33201400;--warn-bg:#331f14;
+ --c-boundary:#8ea0ab;--c-zoning:#b498dd;--c-ran:#6fc06a;--c-ren:#6aa8e6;--c-poacb:#45bcd6;--c-subject:#ff6a4d;
+}}
+:root[data-theme="light"]{--bg:#f2efe8;--panel:#faf8f3;--ink:#20303a;--muted:#6a7780;--hair:#ddd5c7;--good-bg:#e4f1ea;--warn-bg:#f6e7dd;--c-subject:#d8442a}
+:root[data-theme="dark"]{--bg:#0d1418;--panel:#131e24;--ink:#e2e9ed;--muted:#93a4ac;--hair:#26343c;--good-bg:#123024;--warn-bg:#331f14;--c-subject:#ff6a4d}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);line-height:1.55;
+ font-family:ui-sans-serif,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:760px;margin:0 auto;padding:clamp(20px,4vw,44px)}
+.eyebrow{display:flex;flex-wrap:wrap;gap:10px;align-items:center;font:600 12px/1.4 ui-monospace,Menlo,monospace;
+ letter-spacing:.1em;text-transform:uppercase;color:var(--accent)}
+h1{font-size:clamp(26px,5vw,36px);line-height:1.1;margin:.35em 0 .12em;letter-spacing:-.02em;
+ font-variant-numeric:tabular-nums;text-wrap:balance}
+.lede{color:var(--muted);margin:.1em 0 1.2em;max-width:60ch}
+h2{font-size:14px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);
+ margin:0 0 12px;padding-bottom:8px;border-bottom:1px solid var(--hair)}
+section{margin:26px 0}
+.muted{color:var(--muted)}.num{text-align:right;font-variant-numeric:tabular-nums}
+.conf{font:600 11px ui-monospace,Menlo,monospace;text-transform:none;letter-spacing:.02em;
+ padding:.25em .6em;border-radius:999px;border:1px solid var(--hair);color:var(--muted)}
+.conf-high{color:var(--good)}.conf-medium{color:var(--accent)}
+/* map */
+.pdm-map{margin:0 0 8px;background:var(--panel);border:1px solid var(--hair);border-radius:14px;padding:12px;overflow:hidden}
+.pdm-map svg{display:block;width:100%;height:auto}
+.ly{stroke-width:1.3;stroke-linejoin:round;vector-effect:non-scaling-stroke;fill-opacity:.32}
+.ly-boundary{fill:none;stroke:var(--c-boundary);stroke-width:1.7}
+.ly-zoning{fill:var(--c-zoning);stroke:var(--c-zoning);fill-opacity:.22}
+.ly-ran{fill:var(--c-ran);stroke:var(--c-ran)}
+.ly-ren{fill:var(--c-ren);stroke:var(--c-ren)}
+.ly-poacb{fill:var(--c-poacb);stroke:var(--c-poacb)}
+.ly[data-role="absent"]{fill-opacity:.12;stroke-dasharray:4 3}
+.ly[data-role="present"]{fill-opacity:.42}
+.subject-poly{fill:none;stroke:var(--c-subject);stroke-width:2.4;stroke-dasharray:6 3}
+.subject-ring{fill:var(--c-subject);opacity:.18}
+.subject-dot{fill:var(--c-subject);stroke:var(--panel);stroke-width:2}
+.map-scale line{stroke:var(--ink);stroke-width:2}
+.map-scale text,.map-n{font:600 11px ui-monospace,Menlo,monospace;fill:var(--ink)}
+.map-narrow{fill:var(--ink)}
+.pdm-legend{display:flex;flex-wrap:wrap;gap:10px 18px;margin-top:12px;padding-top:11px;
+ border-top:1px solid var(--hair);font-size:13px;color:var(--muted)}
+.pdm-legend span{display:inline-flex;align-items:center;gap:.5em}
+.key{width:16px;height:11px;border-radius:3px;display:inline-block;border:1px solid transparent}
+.key-subject{background:var(--c-subject);border-radius:50%;width:12px;height:12px}
+.key.ly-boundary{background:transparent;border-color:var(--c-boundary)}
+.key.ly-zoning{background:var(--c-zoning);opacity:.5}
+.key.ly-ran{background:var(--c-ran)}.key.ly-ren{background:var(--c-ren)}.key.ly-poacb{background:var(--c-poacb)}
+.key[data-role="absent"]{opacity:.45}
+/* zoning */
+.zrow{display:flex;flex-wrap:wrap;align-items:baseline;gap:8px 12px;padding:9px 0;border-bottom:1px solid var(--hair)}
+.ztag{font-weight:600}.zsub{color:var(--muted)}
+table{width:100%;border-collapse:collapse;font-size:14.5px}
+th{font:600 11px ui-monospace,Menlo,monospace;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);
+ text-align:left;padding:6px 8px;border-bottom:1px solid var(--hair)}
+td{padding:8px;border-bottom:1px solid var(--hair);font-variant-numeric:tabular-nums}
+/* chips */
+.chips{display:flex;flex-wrap:wrap;gap:10px}
+.chip{display:inline-flex;align-items:center;gap:8px;padding:.5em .8em;border-radius:10px;border:1px solid var(--hair);
+ background:var(--panel);font-size:14px}
+.chip-k{font-weight:600}
+.chip-v{font:600 12px ui-monospace,Menlo,monospace;padding:.12em .5em;border-radius:6px}
+.chip-yes .chip-v{background:var(--warn-bg);color:var(--warn)}
+.chip-no .chip-v{background:var(--good-bg);color:var(--good)}
+.chip-d{color:var(--muted);font-size:12.5px}
+/* regulation */
+.art{border:1px solid var(--hair);border-radius:10px;margin:8px 0;background:var(--panel);overflow:hidden}
+.art summary{cursor:pointer;padding:11px 14px;font-weight:600;list-style:none}
+.art summary::-webkit-details-marker{display:none}
+.art summary::before{content:"▸";color:var(--accent);margin-right:8px;font-size:12px}
+.art[open] summary::before{content:"▾"}
+.art-n{font:600 12px ui-monospace,Menlo,monospace;color:var(--accent);margin-right:6px}
+.art-s{display:inline-block;font:500 11px ui-sans-serif,sans-serif;color:var(--muted);margin-left:6px}
+.art-text{padding:0 14px 14px;white-space:pre-wrap;font-size:13.5px;color:var(--ink);border-top:1px solid var(--hair);padding-top:12px}
+.src-line{font-size:13.5px;color:var(--muted)}
+.srcs{list-style:none;padding:0;margin:0;font-size:14px}
+.srcs li{padding:6px 0;border-bottom:1px solid var(--hair)}
+.prov{font:600 11px ui-monospace,Menlo,monospace;color:var(--muted);margin-left:6px}
+.notes ul{padding-left:18px;color:var(--muted);font-size:14px}
+a{color:var(--accent)}
+footer{margin-top:28px;padding-top:16px;border-top:1px solid var(--hair);color:var(--muted);font-size:12.5px;line-height:1.6}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+`

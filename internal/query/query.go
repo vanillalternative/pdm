@@ -6,12 +6,14 @@ package query
 import (
 	"context"
 	"fmt"
+	"math"
 	"sort"
 	"time"
 
 	"github.com/bernardosimoes/pdm/internal/adapter"
 	"github.com/bernardosimoes/pdm/internal/admin"
 	"github.com/bernardosimoes/pdm/internal/crs"
+	"github.com/bernardosimoes/pdm/internal/mapview"
 	"github.com/bernardosimoes/pdm/internal/model"
 	"github.com/bernardosimoes/pdm/internal/registry"
 	"github.com/bernardosimoes/pdm/internal/source"
@@ -213,6 +215,181 @@ func (e *Engine) Polygon(ctx context.Context, g geom.Geometry) (*model.PolygonRe
 	res.Sources = collector.list()
 	res.Confidence = confidence
 	return res, nil
+}
+
+// PointMap builds the map data for a coordinate query: the municipality
+// boundary, the zoning polygon at the point, and nearby constraint zones,
+// clipped to a local view. Returns nil if the location is unsupported.
+func (e *Engine) PointMap(ctx context.Context, lon, lat float64) *mapview.Data {
+	muni, ok := e.resolver.ResolvePoint(lon, lat)
+	if !ok {
+		return nil
+	}
+	ad, ok := registry.Lookup(muni)
+	if !ok {
+		return nil
+	}
+	view := viewAround(lon, lat, 3000)
+	d := &mapview.Data{Subject: spatial.Point(lon, lat), SubjectKind: "point"}
+	d.MinLon, d.MinLat, d.MaxLon, d.MaxLat = view.minLon, view.minLat, view.maxLon, view.maxLat
+
+	if b, ok := e.resolver.BoundaryAt(lon, lat); ok {
+		if bc := clipTo(b, view.rect); !bc.IsEmpty() {
+			d.Layers = append(d.Layers, mapview.Layer{ID: "boundary", Label: "Município de " + muni, Role: mapview.RoleBoundary, G: bc})
+		}
+	}
+
+	opts := e.opts
+	bb := view.bbox()
+	opts.BBox = &bb
+	pt := spatial.Point(lon, lat)
+
+	for _, layer := range ad.Layers(opts) {
+		loaded, err := layer.Loader(ctx)
+		if err != nil {
+			continue
+		}
+		switch layer.Kind {
+		case adapter.KindZoning:
+			var at []spatial.Feature
+			label := "Zonamento"
+			for _, f := range loaded.Features {
+				if spatial.Intersects(pt, f.Geometry) {
+					at = append(at, f)
+					label = classify(layer, f).Label
+				}
+			}
+			if g, _ := spatial.Coverage(view.rect, at); !g.IsEmpty() {
+				d.Layers = append(d.Layers, mapview.Layer{ID: "zoning", Label: label, Role: mapview.RoleZoning, G: simplify(g)})
+			}
+		case adapter.KindConstraint:
+			present := false
+			var near []spatial.Feature
+			for _, f := range loaded.Features {
+				if spatial.Intersects(pt, f.Geometry) {
+					present = true
+				}
+				if spatial.Intersects(view.rect, f.Geometry) {
+					near = append(near, f)
+				}
+			}
+			if len(near) == 0 {
+				continue
+			}
+			if g, _ := spatial.Coverage(view.rect, near); !g.IsEmpty() {
+				role := mapview.RoleAbsent
+				if present {
+					role = mapview.RolePresent
+				}
+				d.Layers = append(d.Layers, mapview.Layer{ID: layer.ID, Label: layer.Constraint, Role: role, G: simplify(g)})
+			}
+		}
+	}
+	return d
+}
+
+// PolygonMap builds the map data for a parcel query.
+func (e *Engine) PolygonMap(ctx context.Context, g geom.Geometry) *mapview.Data {
+	best, _, ok := e.resolver.ResolvePolygon(g)
+	if !ok {
+		return nil
+	}
+	ad, ok := registry.Lookup(best.Municipality)
+	if !ok {
+		return nil
+	}
+	min, max, _ := g.Envelope().MinMaxXYs()
+	cx, cy := (min.X+max.X)/2, (min.Y+max.Y)/2
+	// view spans the parcel plus a margin
+	spanM := math.Max(distM(min.X, cy, max.X, cy), distM(cx, min.Y, cx, max.Y))
+	view := viewAround(cx, cy, math.Max(spanM*0.9, 800))
+	d := &mapview.Data{Subject: g, SubjectKind: "polygon"}
+	d.MinLon, d.MinLat, d.MaxLon, d.MaxLat = view.minLon, view.minLat, view.maxLon, view.maxLat
+
+	if b, ok := e.resolver.BoundaryAt(cx, cy); ok {
+		if bc := clipTo(b, view.rect); !bc.IsEmpty() {
+			d.Layers = append(d.Layers, mapview.Layer{ID: "boundary", Label: "Município de " + best.Municipality, Role: mapview.RoleBoundary, G: bc})
+		}
+	}
+	opts := e.opts
+	bb := view.bbox()
+	opts.BBox = &bb
+	for _, layer := range ad.Layers(opts) {
+		loaded, err := layer.Loader(ctx)
+		if err != nil {
+			continue
+		}
+		var near []spatial.Feature
+		present := false
+		for _, f := range loaded.Features {
+			if spatial.Intersects(view.rect, f.Geometry) {
+				near = append(near, f)
+			}
+			if layer.Kind == adapter.KindConstraint && spatial.Intersects(g, f.Geometry) {
+				present = true
+			}
+		}
+		if len(near) == 0 {
+			continue
+		}
+		cov, _ := spatial.Coverage(view.rect, near)
+		if cov.IsEmpty() {
+			continue
+		}
+		if layer.Kind == adapter.KindZoning {
+			d.Layers = append(d.Layers, mapview.Layer{ID: "zoning", Label: "Zonamento", Role: mapview.RoleZoning, G: simplify(cov)})
+		} else {
+			role := mapview.RoleAbsent
+			if present {
+				role = mapview.RolePresent
+			}
+			d.Layers = append(d.Layers, mapview.Layer{ID: layer.ID, Label: layer.Constraint, Role: role, G: simplify(cov)})
+		}
+	}
+	return d
+}
+
+type viewBox struct {
+	minLon, minLat, maxLon, maxLat float64
+	rect                           geom.Geometry
+}
+
+func (v viewBox) bbox() source.BBox {
+	return source.BBox{MinLon: v.minLon, MinLat: v.minLat, MaxLon: v.maxLon, MaxLat: v.maxLat}
+}
+
+// viewAround returns a view box of roughly halfM metres half-width centred on
+// (lon,lat).
+func viewAround(lon, lat, halfM float64) viewBox {
+	kx := math.Cos(lat * math.Pi / 180)
+	lonHalf := halfM / (111320 * kx)
+	latHalf := halfM / 111320
+	minLon, maxLon := lon-lonHalf, lon+lonHalf
+	minLat, maxLat := lat-latHalf, lat+latHalf
+	gj := fmt.Sprintf(`{"type":"Polygon","coordinates":[[[%g,%g],[%g,%g],[%g,%g],[%g,%g],[%g,%g]]]}`,
+		minLon, minLat, maxLon, minLat, maxLon, maxLat, minLon, maxLat, minLon, minLat)
+	rect, _ := geom.UnmarshalGeoJSON([]byte(gj), geom.NoValidate{})
+	return viewBox{minLon, minLat, maxLon, maxLat, rect}
+}
+
+func clipTo(g, rect geom.Geometry) geom.Geometry {
+	c, err := spatial.Intersection(g, rect)
+	if err != nil {
+		return geom.Geometry{}
+	}
+	return simplify(c)
+}
+
+func simplify(g geom.Geometry) geom.Geometry {
+	if s, err := g.Simplify(0.00003, geom.NoValidate{}); err == nil && !s.IsEmpty() {
+		return s
+	}
+	return g
+}
+
+func distM(lon1, lat1, lon2, lat2 float64) float64 {
+	kx := math.Cos((lat1 + lat2) / 2 * math.Pi / 180)
+	return math.Hypot((lon2-lon1)*111320*kx, (lat2-lat1)*111320)
 }
 
 // attachRegulation retrieves the regulation articles applicable to the result's

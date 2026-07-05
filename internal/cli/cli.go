@@ -39,7 +39,7 @@ USAGE:
   pdm help                        show this help
 
 OPTIONS:
-  --format <text|json|markdown>   output format (default: text)
+  --format <text|json|markdown|html>   output format (default: text)
   --live                          fetch from official geoservices (falls back to bundled)
   --no-cache                      do not read/write the local cache
   --cache-dir <dir>               override the cache directory
@@ -153,6 +153,17 @@ func runPoint(args []string, opts options, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "error: %v\n", err)
 		return 1
 	}
+	if opts.format == report.FormatHTML {
+		svg := ""
+		if m := eng.PointMap(ctx, lon, lat); m != nil {
+			svg = m.SVG()
+		}
+		if err := report.PointHTML(stdout, res, svg); err != nil {
+			fmt.Fprintf(stderr, "error: %v\n", err)
+			return 1
+		}
+		return 0
+	}
 	if err := report.Point(stdout, res, opts.format); err != nil {
 		fmt.Fprintf(stderr, "error: %v\n", err)
 		return 1
@@ -193,6 +204,17 @@ func runPolygon(args []string, opts options, stdout, stderr io.Writer) int {
 	if err != nil {
 		fmt.Fprintf(stderr, "error: %v\n", err)
 		return 1
+	}
+	if opts.format == report.FormatHTML {
+		svg := ""
+		if m := eng.PolygonMap(ctx, g); m != nil {
+			svg = m.SVG()
+		}
+		if err := report.PolygonHTML(stdout, res, svg); err != nil {
+			fmt.Fprintf(stderr, "error: %v\n", err)
+			return 1
+		}
+		return 0
 	}
 	if err := report.Polygon(stdout, res, opts.format); err != nil {
 		fmt.Fprintf(stderr, "error: %v\n", err)

@@ -21,6 +21,7 @@ import (
 	"github.com/bernardosimoes/pdm/internal/report"
 	"github.com/bernardosimoes/pdm/internal/source"
 	"github.com/bernardosimoes/pdm/internal/spatial"
+	"github.com/peterstace/simplefeatures/geom"
 )
 
 // Version is the tool version (overridable at build time).
@@ -165,7 +166,18 @@ func runPolygon(args []string, opts options, stdout, stderr io.Writer) int {
 		return 2
 	}
 	path := args[0]
-	g, err := spatial.LoadInputGeometry(path)
+	var g geom.Geometry
+	var err error
+	if path == "-" {
+		data, rerr := io.ReadAll(os.Stdin)
+		if rerr != nil {
+			fmt.Fprintf(stderr, "error: reading stdin: %v\n", rerr)
+			return 1
+		}
+		g, err = spatial.ParseInputGeometry(data)
+	} else {
+		g, err = spatial.LoadInputGeometry(path)
+	}
 	if err != nil {
 		fmt.Fprintf(stderr, "error: reading %s: %v\n", path, err)
 		return 1
@@ -248,6 +260,10 @@ func parse(args []string, opts *options) ([]string, error) {
 	var positionals []string
 	for i := 0; i < len(args); i++ {
 		a := args[i]
+		if a == "--" { // end-of-options: everything after is positional
+			positionals = append(positionals, args[i+1:]...)
+			break
+		}
 		if isFlag(a) {
 			name, val, hasInline := splitFlag(a)
 			switch name {
@@ -316,7 +332,8 @@ func needValue(name, inline string, hasInline bool, args []string, i *int) (stri
 	if hasInline {
 		return inline, nil
 	}
-	if *i+1 >= len(args) {
+	// Don't swallow a following flag as this flag's value.
+	if *i+1 >= len(args) || isFlag(args[*i+1]) {
 		return "", fmt.Errorf("flag --%s needs a value", name)
 	}
 	*i++

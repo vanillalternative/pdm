@@ -70,6 +70,7 @@ func (e *Engine) Point(ctx context.Context, lon, lat float64) (*model.PointResul
 	pt := spatial.Point(lon, lat)
 	collector := newSourceSet()
 	confidence := ad.BaseConfidence()
+	zoneSeen := map[string]bool{}
 
 	for _, layer := range ad.Layers(opts) {
 		loaded, err := layer.Loader(ctx)
@@ -90,6 +91,10 @@ func (e *Engine) Point(ctx context.Context, lon, lat float64) (*model.PointResul
 					continue
 				}
 				c := classify(layer, f)
+				if zoneSeen[c.Label] { // overlapping polygons can repeat a class
+					continue
+				}
+				zoneSeen[c.Label] = true
 				res.Zoning = append(res.Zoning, model.ZoningHit{
 					Class:    c.Class,
 					Subclass: c.Subclass,
@@ -137,11 +142,9 @@ func (e *Engine) Polygon(ctx context.Context, g geom.Geometry) (*model.PolygonRe
 		Disclaimer:  model.Disclaimer,
 		GeneratedAt: e.now(),
 	}
-	total := crs.AreaM2(g)
-	res.AnalysedAreaM2 = total
-
 	best, overlaps, ok := e.resolver.ResolvePolygon(g)
 	if !ok {
+		res.AnalysedAreaM2 = crs.AreaM2(g)
 		res.Municipality = "(undetermined)"
 		res.Confidence = model.ConfidenceLow
 		res.Notes = append(res.Notes,
@@ -149,6 +152,11 @@ func (e *Engine) Polygon(ctx context.Context, g geom.Geometry) (*model.PolygonRe
 		return res, nil
 	}
 	res.Municipality = best.Municipality
+	// Analyse only the portion inside the resolved municipality, so zoning and
+	// constraint percentages are shares of the analysed area — not of a parcel
+	// that may straddle a boundary into unanalysed municipalities.
+	total := best.AreaM2
+	res.AnalysedAreaM2 = total
 	if len(overlaps) > 1 {
 		res.Notes = append(res.Notes, straddleNote(best, overlaps))
 	}
@@ -190,6 +198,11 @@ func (e *Engine) Polygon(ctx context.Context, g geom.Geometry) (*model.PolygonRe
 			hit := constraintCoverage(g, total, layer, loaded.Features)
 			res.Constraints = append(res.Constraints, hit)
 		}
+	}
+
+	if len(res.Zoning) == 0 {
+		res.Notes = append(res.Notes, "No zoning category matched the parcel in the available layers.")
+		confidence = downgrade(confidence)
 	}
 
 	sort.SliceStable(res.Zoning, func(i, j int) bool { return res.Zoning[i].AreaM2 > res.Zoning[j].AreaM2 })

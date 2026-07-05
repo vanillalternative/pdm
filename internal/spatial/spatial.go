@@ -87,13 +87,18 @@ type rawFeature struct {
 // parsed at all are skipped rather than failing the whole load.
 func LoadFeatureCollection(data []byte) ([]Feature, error) {
 	var fc struct {
-		Features []rawFeature `json:"features"`
+		// Pointer so an absent "features" key (e.g. an HTTP-200 error payload
+		// like {"error":{...}}) is distinguishable from an empty collection.
+		Features *[]rawFeature `json:"features"`
 	}
 	if err := json.Unmarshal(data, &fc); err != nil {
 		return nil, fmt.Errorf("parse feature collection: %w", err)
 	}
-	out := make([]Feature, 0, len(fc.Features))
-	for _, rf := range fc.Features {
+	if fc.Features == nil {
+		return nil, fmt.Errorf("not a GeoJSON FeatureCollection (no 'features' array)")
+	}
+	out := make([]Feature, 0, len(*fc.Features))
+	for _, rf := range *fc.Features {
 		if len(rf.Geometry) == 0 || string(rf.Geometry) == "null" {
 			continue
 		}

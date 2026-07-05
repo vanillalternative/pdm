@@ -130,6 +130,9 @@ func pointMarkdown(w io.Writer, r *model.PointResult) error {
 		fmt.Fprintf(b, "- %s\n", z.Label)
 	}
 	fmt.Fprintf(b, "\n## Constraints\n\n")
+	if len(r.Constraints) == 0 {
+		fmt.Fprintf(b, "- (none evaluated)\n")
+	}
 	for _, c := range r.Constraints {
 		fmt.Fprintf(b, "- %s\n", constraintPointLine(c))
 	}

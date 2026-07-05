@@ -22,3 +22,9 @@ var (
 	//go:embed tomar/ren.geojson
 	TomarREN []byte
 )
+
+// TomarRegulamento holds the PDM de Tomar written regulation, parsed into
+// articles with section context (retrieval only — the tool does not interpret).
+//
+//go:embed tomar/regulamento.json
+var TomarRegulamento []byte

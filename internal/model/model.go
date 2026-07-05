@@ -67,6 +67,26 @@ type PlanInfo struct {
 	Documents     []Document `json:"documents,omitempty"`
 }
 
+// Article is a single article of a plan's written regulation (Regulamento),
+// with its section context. Text is the verbatim article body — the tool
+// surfaces it for a human/AI to read but never interprets it.
+type Article struct {
+	Number  string `json:"number"`
+	Title   string `json:"title"`
+	Section string `json:"section,omitempty"`
+	Text    string `json:"text,omitempty"`
+}
+
+// Regulation is the set of regulation articles applicable to a result, retrieved
+// by matching the zoning category to regulation sections. It is candidate
+// material to read, not an interpretation.
+type Regulation struct {
+	Reference string    `json:"reference,omitempty"`
+	URL       string    `json:"url,omitempty"`
+	Articles  []Article `json:"articles"`
+	Note      string    `json:"note,omitempty"`
+}
+
 // ZoningHit is a land-use / zoning classification affecting the query location.
 type ZoningHit struct {
 	Class    string `json:"class"`              // top-level classification, e.g. "Solo rústico"
@@ -100,6 +120,7 @@ type PointResult struct {
 	Plan         *PlanInfo       `json:"plan,omitempty"`
 	Zoning       []ZoningHit     `json:"zoning"`
 	Constraints  []ConstraintHit `json:"constraints"`
+	Regulation   *Regulation     `json:"regulation,omitempty"`
 	Sources      []Source        `json:"sources"`
 	Confidence   Confidence      `json:"confidence"`
 	Notes        []string        `json:"notes,omitempty"`
@@ -115,6 +136,7 @@ type PolygonResult struct {
 	AnalysedAreaM2 float64         `json:"analysed_area_m2"`
 	Zoning         []ZoningHit     `json:"zoning"`      // sorted desc by area
 	Constraints    []ConstraintHit `json:"constraints"` // sorted desc by area
+	Regulation     *Regulation     `json:"regulation,omitempty"`
 	Sources        []Source        `json:"sources"`
 	Confidence     Confidence      `json:"confidence"`
 	Notes          []string        `json:"notes,omitempty"`

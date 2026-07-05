@@ -6,6 +6,7 @@ package adapter
 
 import (
 	"github.com/bernardosimoes/pdm/internal/model"
+	"github.com/bernardosimoes/pdm/internal/reg"
 	"github.com/bernardosimoes/pdm/internal/source"
 	"github.com/bernardosimoes/pdm/internal/spatial"
 )
@@ -62,4 +63,8 @@ type Adapter interface {
 
 	// BaseConfidence is the confidence ceiling this adapter's data supports.
 	BaseConfidence() model.Confidence
+
+	// Regulation returns the plan's parsed written regulation (Regulamento) for
+	// retrieval of applicable articles, or nil if none is available.
+	Regulation() *reg.Store
 }

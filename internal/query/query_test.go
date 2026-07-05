@@ -44,6 +44,14 @@ func TestPointTomarCentre(t *testing.T) {
 	if res.Plan == nil || res.Plan.Name != "PDM de Tomar" {
 		t.Error("expected PDM de Tomar plan")
 	}
+	// Regulation retrieval: the centre's zoning category should surface its
+	// regulation articles with full text, and the tool must not interpret them.
+	if res.Regulation == nil || len(res.Regulation.Articles) == 0 {
+		t.Fatal("expected applicable regulation articles at Tomar centre")
+	}
+	if res.Regulation.Articles[0].Text == "" {
+		t.Error("regulation articles should carry verbatim text (the AI payload)")
+	}
 }
 
 func TestPointUnsupportedMunicipality(t *testing.T) {

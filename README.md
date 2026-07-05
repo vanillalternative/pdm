@@ -7,8 +7,21 @@
 It is *not* a downloader or a summary of the whole municipal plan. It resolves the
 location to a municipality, finds the planning instrument (PDM/IGT) in force, and
 intersects the point/polygon against the official planning layers — returning the
-concrete zoning class and the constraints (RAN, REN, …) that hit that spot, with
-source attribution, a confidence level, and links to the official documents.
+concrete zoning class, the constraints (RAN, REN, …) that hit that spot, **and the
+regulation articles that apply to that zoning category**, with source attribution,
+a confidence level, and links to the official documents.
+
+## Design philosophy — an AI enabler with no AI inside
+
+`pdm` **assembles**, it does not **interpret**. Given coordinates it deterministically
+gathers all the relevant public data — zoning class, constraints, and the verbatim
+text of the applicable *Regulamento* articles — and hands it over as a structured
+evidence pack (ideal as JSON for a downstream AI or a human to reason over). It
+deliberately does **not** compute "you can build 2 floors at índice 0.8": extracting
+the numeric building envelope is interpretation, and that is the job of the AI or
+person consuming the output, not of the tool. The tool contains no model and makes
+no legal judgement. The legally binding answer only ever comes from a **PIP** to the
+Câmara (RJUE) — automated data gets you most of the way, never the certificate.
 
 > ⚠️ **Legal disclaimer.** This is an automated query against public planning data
 > (an approximation). It is **not** an official municipal certificate, a *certidão*,
@@ -79,6 +92,13 @@ Constraints:
   - RAN: no
   - REN: yes — Áreas Estratégicas de Proteção e Recarga de Aquíferos
 
+Applicable regulation (read the full text — not interpreted here):
+  Aviso n.º 1510/2022, DR 2.ª série, n.º 16  https://files.dre.pt/2s/2022/01/016000000/0032700390.pdf
+  - Art. 31.º — Identificação e usos  [Espaços Centrais]
+  - Art. 32.º — Espaços Centrais Nível 1 — regime de edificabilidade  [Espaços Centrais]
+  - ...
+  (full article text: --format json or markdown)
+
 Sources:
   - DGT CRUS — ordenamento do solo (Tomar) [bundled-snapshot]
   - DGT SRUP — RAN (Tomar) [bundled-snapshot]
@@ -86,6 +106,11 @@ Sources:
 
 Confidence: medium
 ```
+
+The **regulation** section maps the matched zoning category to the *Regulamento*
+articles that govern it (by matching the category to the regulation's sections) and
+carries their **verbatim text** in the JSON/Markdown output — the raw rules for a
+person or AI to read. It is retrieval, not interpretation.
 
 Polygon output reports the analysed area and, per zoning category and per
 constraint, the intersected area in m² and the percentage of the parcel.
@@ -101,7 +126,8 @@ GeoJSON) over WMS/raster/PDF.
 | Zoning (classificação e qualificação do solo) | DGT **CRUS** | OGC API Features |
 | RAN (Reserva Agrícola Nacional) | DGT/SNIT **SRUP** | OGC API Features |
 | REN (Reserva Ecológica Nacional) | Município de Tomar / Médio Tejo (**MuniSIG**) | ArcGIS REST (GeoJSON) |
-| Plan document (regulamento) | *Aviso n.º 1510/2022*, DR 2.ª série n.º 16 | [PDF](https://files.dre.pt/2s/2022/01/016000000/0032700390.pdf) · [PCGT](https://pcgt.dgterritorio.gov.pt/FDE12471) |
+| Regulation articles (Regulamento) | *Aviso n.º 1510/2022*, DR 2.ª série n.º 16 | [PDF](https://files.dre.pt/2s/2022/01/016000000/0032700390.pdf) → parsed into 103 articles with section context |
+| Plan metadata | PCGT/DGT | [PCGT](https://pcgt.dgterritorio.gov.pt/FDE12471) |
 
 By default `pdm` runs against a **bundled snapshot** of this data (embedded in the
 binary), so it works offline and deterministically. `--live` fetches fresh data
@@ -112,14 +138,17 @@ never hammered.
 ### Regenerating the bundled snapshot
 
 ```sh
-go run ./cmd/pdmdata            # refetch + rebuild everything under ./data
-go run ./cmd/pdmdata ren        # just one layer
+go run ./cmd/pdmdata             # refetch + rebuild everything under ./data
+go run ./cmd/pdmdata ren         # just one layer
+go run ./cmd/pdmdata regulamento # re-parse the Regulamento (needs `pdftotext`)
 ```
 
 The ingest tool fetches from the official endpoints, reduces the (12–15 dp!)
 coordinate precision to ~0.1 m, simplifies administrative boundaries used only for
 resolution, filters attributes to the fields the tool uses, and writes compact
-GeoJSON with a `_source` provenance block.
+GeoJSON with a `_source` provenance block. The `regulamento` target downloads the
+official PDM regulation PDF and parses it into articles (with chapter/section
+context); it requires `pdftotext` (poppler) at regeneration time only.
 
 ## Architecture
 
@@ -132,6 +161,7 @@ internal/
   spatial          GeoJSON loading + point-in-polygon + coverage (union of clips)
   admin            coordinate/polygon → municipality (CAOP boundaries)
   registry         municipality → adapter; "supported" set
+  reg              Regulamento articles + zoning-category → article retrieval
   adapter          per-municipality contract (Adapter interface)
     tomar          the pilot adapter
   source           data loaders: bundled / file / WFS / OGC API Features + cache

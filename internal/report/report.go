@@ -86,6 +86,7 @@ func pointText(w io.Writer, r *model.PointResult) error {
 	for _, c := range r.Constraints {
 		fmt.Fprintf(b, "  - %s\n", constraintPointLine(c))
 	}
+	writeRegulation(b, r.Regulation)
 	writeSources(b, r.Sources)
 	writeNotes(b, r.Notes)
 	writeConfidence(b, r.Confidence)
@@ -136,6 +137,7 @@ func pointMarkdown(w io.Writer, r *model.PointResult) error {
 	for _, c := range r.Constraints {
 		fmt.Fprintf(b, "- %s\n", constraintPointLine(c))
 	}
+	mdRegulation(b, r.Regulation)
 	mdSources(b, r.Sources)
 	mdDocuments(b, r.Plan)
 	mdNotes(b, r.Notes)
@@ -184,6 +186,7 @@ func polygonText(w io.Writer, r *model.PolygonResult) error {
 	for _, c := range r.Constraints {
 		fmt.Fprintf(b, "  - %s m² / %s%% — %s\n", area(c.AreaM2), pct(c.Percent), c.Type)
 	}
+	writeRegulation(b, r.Regulation)
 	writeSources(b, r.Sources)
 	writeNotes(b, r.Notes)
 	writeConfidence(b, r.Confidence)
@@ -211,6 +214,7 @@ func polygonMarkdown(w io.Writer, r *model.PolygonResult) error {
 			fmt.Fprintf(b, "| %s | %s%% | %s |\n", area(c.AreaM2), pct(c.Percent), c.Type)
 		}
 	}
+	mdRegulation(b, r.Regulation)
 	mdSources(b, r.Sources)
 	mdDocuments(b, r.Plan)
 	mdNotes(b, r.Notes)
@@ -220,6 +224,56 @@ func polygonMarkdown(w io.Writer, r *model.PolygonResult) error {
 }
 
 // ---- shared helpers ----
+
+func writeRegulation(b *strings.Builder, r *model.Regulation) {
+	if r == nil {
+		return
+	}
+	fmt.Fprintf(b, "\nApplicable regulation (read the full text — not interpreted here):\n")
+	if r.Reference != "" || r.URL != "" {
+		fmt.Fprintf(b, "  %s  %s\n", r.Reference, r.URL)
+	}
+	if len(r.Articles) == 0 {
+		fmt.Fprintf(b, "  - (no section-specific article matched; consult the full regulation)\n")
+		return
+	}
+	for _, a := range r.Articles {
+		sec := ""
+		if a.Section != "" {
+			sec = "  [" + a.Section + "]"
+		}
+		fmt.Fprintf(b, "  - Art. %s — %s%s\n", a.Number, a.Title, sec)
+	}
+	fmt.Fprintf(b, "  (full article text: --format json or markdown)\n")
+}
+
+func mdRegulation(b *strings.Builder, r *model.Regulation) {
+	if r == nil {
+		return
+	}
+	fmt.Fprintf(b, "\n## Applicable regulation\n\n")
+	fmt.Fprintf(b, "_Candidate articles matched to the zoning category — read them in full. Retrieval only, not an interpretation or legal advice._\n\n")
+	if r.Reference != "" {
+		if r.URL != "" {
+			fmt.Fprintf(b, "Source: [%s](%s)\n", r.Reference, r.URL)
+		} else {
+			fmt.Fprintf(b, "Source: %s\n", r.Reference)
+		}
+	}
+	if len(r.Articles) == 0 {
+		fmt.Fprintf(b, "\n- (no section-specific article matched; consult the full regulation)\n")
+		return
+	}
+	for _, a := range r.Articles {
+		fmt.Fprintf(b, "\n### Artigo %s — %s\n", a.Number, a.Title)
+		if a.Section != "" {
+			fmt.Fprintf(b, "_Secção: %s_\n\n", a.Section)
+		}
+		if a.Text != "" {
+			fmt.Fprintf(b, "%s\n", a.Text)
+		}
+	}
+}
 
 func writeSources(b *strings.Builder, sources []model.Source) {
 	fmt.Fprintf(b, "\nSources:\n")

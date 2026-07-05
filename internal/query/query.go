@@ -128,6 +128,7 @@ func (e *Engine) Point(ctx context.Context, lon, lat float64) (*model.PointResul
 		res.Notes = append(res.Notes, "No zoning category matched the coordinate in the available layers.")
 		confidence = downgrade(confidence)
 	}
+	res.Regulation = attachRegulation(ad, res.Zoning)
 	res.Sources = collector.list()
 	res.Confidence = confidence
 	return res, nil
@@ -208,9 +209,42 @@ func (e *Engine) Polygon(ctx context.Context, g geom.Geometry) (*model.PolygonRe
 	sort.SliceStable(res.Zoning, func(i, j int) bool { return res.Zoning[i].AreaM2 > res.Zoning[j].AreaM2 })
 	sort.SliceStable(res.Constraints, func(i, j int) bool { return res.Constraints[i].AreaM2 > res.Constraints[j].AreaM2 })
 
+	res.Regulation = attachRegulation(ad, res.Zoning)
 	res.Sources = collector.list()
 	res.Confidence = confidence
 	return res, nil
+}
+
+// attachRegulation retrieves the regulation articles applicable to the result's
+// zoning categories. This is pure retrieval: it hands over the rules to read,
+// it does not interpret them into building parameters.
+func attachRegulation(ad adapter.Adapter, zoning []model.ZoningHit) *model.Regulation {
+	store := ad.Regulation()
+	if store == nil {
+		return nil
+	}
+	arts := store.MatchSection(zoningTerms(zoning)...)
+	return &model.Regulation{
+		Reference: store.Reference,
+		URL:       store.URL,
+		Articles:  arts,
+		Note: "Candidate articles retrieved by matching the zoning category to regulation sections. " +
+			"Read them in full to determine the building rules — this tool does not interpret them, and it is not legal advice.",
+	}
+}
+
+func zoningTerms(zoning []model.ZoningHit) []string {
+	seen := map[string]bool{}
+	var terms []string
+	for _, z := range zoning {
+		for _, t := range []string{z.Subclass, z.Label} {
+			if t != "" && !seen[t] {
+				seen[t] = true
+				terms = append(terms, t)
+			}
+		}
+	}
+	return terms
 }
 
 // zoningBreakdown groups intersecting zoning features by classification label

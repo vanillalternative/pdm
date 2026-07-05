@@ -19,7 +19,9 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -57,6 +59,7 @@ func run() error {
 		{"zoning", buildZoning},
 		{"ran", buildRAN},
 		{"ren", buildREN},
+		{"regulamento", buildRegulamento},
 	}
 	for _, t := range targets {
 		if only != "" && only != t.name {
@@ -176,6 +179,129 @@ func buildREN(stamp string) error {
 		URL:  arcBase + "/CondicionantesREN2020/MapServer", Service: "ArcGIS REST (GeoJSON)",
 		RetrievedAt: stamp, Note: "REN typology layers 4–9 combined; tagged by typology.",
 	})
+}
+
+// ---- regulamento (PDM written regulation) ----
+
+const regPDFURL = "https://files.dre.pt/2s/2022/01/016000000/0032700390.pdf"
+
+var (
+	reArtigo = regexp.MustCompile(`^Artigo\s+(\d+)\.º`)
+	reSeccao = regexp.MustCompile(`^(SUBSECÇÃO|SUB-SECÇÃO|SECÇÃO)\b`)
+	reChap   = regexp.MustCompile(`^(TÍTULO|CAPÍTULO)\b`)
+	reFooter = regexp.MustCompile(`^(Diário da República|PARTE|Pág\.|N\.º \d+|\d{1,4}|www\.dre\.pt)`)
+)
+
+type regArticle struct {
+	Number  string `json:"number"`
+	Title   string `json:"title"`
+	Section string `json:"section,omitempty"`
+	Text    string `json:"text"`
+}
+
+func buildRegulamento(stamp string) error {
+	pdf, err := get(regPDFURL)
+	if err != nil {
+		return err
+	}
+	txt, err := pdfToText(pdf)
+	if err != nil {
+		return fmt.Errorf("pdftotext (install poppler): %w", err)
+	}
+	articles := parseArticles(txt)
+	if len(articles) < 50 {
+		return fmt.Errorf("parsed only %d articles — regulamento format may have changed", len(articles))
+	}
+	doc := map[string]any{
+		"_source": source{
+			Name: "PDM de Tomar — Regulamento (Aviso n.º 1510/2022, DR 2.ª série n.º 16)",
+			URL:  regPDFURL, Service: "Diário da República (PDF → text)",
+			RetrievedAt: stamp, Note: "Articles parsed from the official regulamento; section context preserved.",
+		},
+		"reference": "Aviso n.º 1510/2022, DR 2.ª série, n.º 16, de 2022-01-24",
+		"articles":  articles,
+	}
+	b, err := json.Marshal(doc)
+	if err != nil {
+		return err
+	}
+	if err := os.WriteFile("data/tomar/regulamento.json", b, 0o644); err != nil {
+		return err
+	}
+	info, _ := os.Stat("data/tomar/regulamento.json")
+	fmt.Printf("    wrote data/tomar/regulamento.json (%d articles, %.2f MB)\n", len(articles), float64(info.Size())/(1<<20))
+	return nil
+}
+
+func pdfToText(pdf []byte) (string, error) {
+	tmp, err := os.CreateTemp("", "pdm-*.pdf")
+	if err != nil {
+		return "", err
+	}
+	defer os.Remove(tmp.Name())
+	if _, err := tmp.Write(pdf); err != nil {
+		tmp.Close()
+		return "", err
+	}
+	tmp.Close()
+	out, err := exec.Command("pdftotext", "-enc", "UTF-8", tmp.Name(), "-").Output()
+	if err != nil {
+		return "", err
+	}
+	return string(out), nil
+}
+
+func parseArticles(txt string) []regArticle {
+	var lines []string
+	for _, l := range strings.Split(txt, "\n") {
+		lines = append(lines, strings.TrimSpace(l))
+	}
+	nextNonEmpty := func(i int) (string, int) {
+		for j := i + 1; j < len(lines); j++ {
+			if lines[j] != "" {
+				return lines[j], j
+			}
+		}
+		return "", len(lines)
+	}
+	var arts []regArticle
+	var section, chapter string
+	for i := 0; i < len(lines); {
+		l := lines[i]
+		switch {
+		case reChap.MatchString(l):
+			t, j := nextNonEmpty(i)
+			chapter, section = t, ""
+			i = j + 1
+		case reSeccao.MatchString(l):
+			t, j := nextNonEmpty(i)
+			section = t
+			i = j + 1
+		case reArtigo.MatchString(l):
+			num := reArtigo.FindStringSubmatch(l)[1]
+			title, j := nextNonEmpty(i)
+			var body []string
+			k := j + 1
+			for k < len(lines) {
+				if reArtigo.MatchString(lines[k]) || reSeccao.MatchString(lines[k]) || reChap.MatchString(lines[k]) {
+					break
+				}
+				if lines[k] != "" && !reFooter.MatchString(lines[k]) {
+					body = append(body, lines[k])
+				}
+				k++
+			}
+			sec := section
+			if sec == "" {
+				sec = chapter
+			}
+			arts = append(arts, regArticle{Number: num + ".º", Title: title, Section: sec, Text: strings.Join(body, "\n")})
+			i = k
+		default:
+			i++
+		}
+	}
+	return arts
 }
 
 // ---- processing ----

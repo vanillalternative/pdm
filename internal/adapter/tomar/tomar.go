@@ -6,9 +6,12 @@
 package tomar
 
 import (
+	"sync"
+
 	"github.com/bernardosimoes/pdm/data"
 	"github.com/bernardosimoes/pdm/internal/adapter"
 	"github.com/bernardosimoes/pdm/internal/model"
+	"github.com/bernardosimoes/pdm/internal/reg"
 	"github.com/bernardosimoes/pdm/internal/source"
 	"github.com/bernardosimoes/pdm/internal/spatial"
 )
@@ -22,6 +25,21 @@ type Adapter struct{}
 func New() *Adapter { return &Adapter{} }
 
 func (a *Adapter) Municipality() string { return "Tomar" }
+
+var (
+	regOnce  sync.Once
+	regStore *reg.Store
+)
+
+// Regulation loads (once) the parsed PDM de Tomar Regulamento.
+func (a *Adapter) Regulation() *reg.Store {
+	regOnce.Do(func() {
+		if s, err := reg.Load(data.TomarRegulamento); err == nil {
+			regStore = s
+		}
+	})
+	return regStore
+}
 
 func (a *Adapter) BaseConfidence() model.Confidence {
 	// Zoning and RAN come from the national DGT datasets (CRUS/SRUP); REN from

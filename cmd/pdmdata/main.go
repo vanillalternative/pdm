@@ -281,7 +281,9 @@ func fetchOGC(itemsURL string) ([]json.RawMessage, error) {
 				next = l.Href
 			}
 		}
-		if doc.NumberReturned == 0 {
+		// Stop only when the page is empty; rely on the next link for pagination
+		// (numberReturned may be omitted by the server).
+		if len(doc.Features) == 0 {
 			break
 		}
 	}
@@ -324,7 +326,10 @@ func fetchArcGIS(layerURL string) ([]json.RawMessage, error) {
 }
 
 func get(u string) ([]byte, error) {
-	req, _ := http.NewRequest(http.MethodGet, u, nil)
+	req, err := http.NewRequest(http.MethodGet, u, nil)
+	if err != nil {
+		return nil, fmt.Errorf("bad URL %q: %w", u, err)
+	}
 	req.Header.Set("User-Agent", "pdmdata/0.1 (planning-data ingest)")
 	req.Header.Set("Accept", "application/json, application/geo+json")
 	resp, err := httpClient.Do(req)

@@ -144,7 +144,7 @@ func WFS(cfg WFSConfig, opts Options) Loader {
 				b.MinLat, b.MinLon, b.MaxLat, b.MaxLon))
 		}
 		reqURL := cfg.BaseURL + "?" + q.Encode()
-		data, fetchedAt, err := fetch(ctx, opts, reqURL)
+		data, fetchedAt, fromCache, err := fetch(ctx, opts, reqURL)
 		if err != nil {
 			return Loaded{}, err
 		}
@@ -154,7 +154,7 @@ func WFS(cfg WFSConfig, opts Options) Loader {
 		}
 		m := cfg.Meta
 		m.URL = reqURL
-		m.Provenance = provenanceForFetch(opts, fetchedAt)
+		m.Provenance = provenanceForFetch(fromCache)
 		m.RetrievedAt = &fetchedAt
 		return Loaded{Features: feats, Source: m}, nil
 	}
@@ -199,24 +199,30 @@ func OGC(cfg OGCConfig, opts Options) Loader {
 
 		var all []spatial.Feature
 		var firstFetch time.Time
+		var firstFromCache bool
+		seen := map[string]bool{}
 		for page := 0; page < maxPages && next != ""; page++ {
-			data, fetchedAt, err := fetch(ctx, opts, next)
+			if seen[next] { // guard against a self-referential/cyclic next link
+				break
+			}
+			seen[next] = true
+			data, fetchedAt, fromCache, err := fetch(ctx, opts, next)
 			if err != nil {
 				return Loaded{}, err
 			}
 			if page == 0 {
-				firstFetch = fetchedAt
+				firstFetch, firstFromCache = fetchedAt, fromCache
 			}
 			feats, err := spatial.LoadFeatureCollection(data)
 			if err != nil {
 				return Loaded{}, fmt.Errorf("OGC items: %w", err)
 			}
 			all = append(all, feats...)
-			next = nextLink(data)
+			next = resolveRef(next, nextLink(data))
 		}
 		m := cfg.Meta
 		m.URL = cfg.ItemsURL
-		m.Provenance = provenanceForFetch(opts, firstFetch)
+		m.Provenance = provenanceForFetch(firstFromCache)
 		m.RetrievedAt = &firstFetch
 		return Loaded{Features: all, Source: m}, nil
 	}
@@ -242,47 +248,63 @@ func nextLink(data []byte) string {
 	return ""
 }
 
-func provenanceForFetch(opts Options, fetchedAt time.Time) model.Provenance {
-	// If the payload came out of a warm cache the timestamp will be older than
-	// this run; either way it is official data. We label live vs cache by
-	// recency relative to a short window.
-	if time.Since(fetchedAt) < 5*time.Second {
-		return model.ProvenanceOfficialLive
+// resolveRef resolves a possibly-relative href against the base request URL so
+// services that return relative rel=next links still paginate.
+func resolveRef(base, href string) string {
+	if href == "" {
+		return ""
 	}
-	return model.ProvenanceOfficialCache
+	b, err := url.Parse(base)
+	if err != nil {
+		return href
+	}
+	r, err := url.Parse(href)
+	if err != nil {
+		return href
+	}
+	return b.ResolveReference(r).String()
 }
 
-// fetch performs a cached HTTP GET, returning the body and the effective fetch
-// time (cache time on a hit, now on a miss).
-func fetch(ctx context.Context, opts Options, reqURL string) ([]byte, time.Time, error) {
+func provenanceForFetch(fromCache bool) model.Provenance {
+	// Labelled by where the bytes actually came from, not by elapsed time (a
+	// slow multi-page live fetch must not be mislabelled as cache).
+	if fromCache {
+		return model.ProvenanceOfficialCache
+	}
+	return model.ProvenanceOfficialLive
+}
+
+// fetch performs a cached HTTP GET, returning the body, the effective fetch
+// time (cache time on a hit, now on a miss), and whether it came from cache.
+func fetch(ctx context.Context, opts Options, reqURL string) ([]byte, time.Time, bool, error) {
 	if opts.Cache != nil {
 		if e, ok := opts.Cache.Get(reqURL); ok {
-			return e.Data, e.FetchedAt, nil
+			return e.Data, e.FetchedAt, true, nil
 		}
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
 	if err != nil {
-		return nil, time.Time{}, err
+		return nil, time.Time{}, false, err
 	}
 	req.Header.Set("User-Agent", userAgent)
 	req.Header.Set("Accept", "application/json, application/geo+json")
 	resp, err := opts.client().Do(req)
 	if err != nil {
-		return nil, time.Time{}, fmt.Errorf("GET %s: %w", trim(reqURL), err)
+		return nil, time.Time{}, false, fmt.Errorf("GET %s: %w", trim(reqURL), err)
 	}
 	defer resp.Body.Close()
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 64<<20))
 	if err != nil {
-		return nil, time.Time{}, err
+		return nil, time.Time{}, false, err
 	}
 	if resp.StatusCode != http.StatusOK {
-		return nil, time.Time{}, fmt.Errorf("GET %s: status %d", trim(reqURL), resp.StatusCode)
+		return nil, time.Time{}, false, fmt.Errorf("GET %s: status %d", trim(reqURL), resp.StatusCode)
 	}
 	now := timeNow()
 	if opts.Cache != nil {
 		_ = opts.Cache.Put(reqURL, reqURL, body, now)
 	}
-	return body, now, nil
+	return body, now, false, nil
 }
 
 func trim(s string) string {

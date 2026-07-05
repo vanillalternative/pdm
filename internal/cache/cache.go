@@ -86,16 +86,36 @@ func (c *Cache) Get(key string) (Entry, bool) {
 }
 
 // Put stores data for key with the given fetch time and optional source URL.
+// Writes are atomic (temp file + rename) and the data is written before the
+// meta, so a concurrent reader never sees a half-written or orphaned entry.
 func (c *Cache) Put(key, url string, data []byte, fetchedAt time.Time) error {
 	if c == nil || c.disable {
 		return nil
 	}
-	if err := os.WriteFile(c.path(key, ".data"), data, 0o644); err != nil {
+	if err := writeAtomic(c.path(key, ".data"), data); err != nil {
 		return err
 	}
 	m := meta{Key: key, FetchedAt: fetchedAt, URL: url}
 	b, _ := json.MarshalIndent(m, "", "  ")
-	return os.WriteFile(c.path(key, ".meta.json"), b, 0o644)
+	return writeAtomic(c.path(key, ".meta.json"), b)
+}
+
+func writeAtomic(path string, data []byte) error {
+	tmp, err := os.CreateTemp(filepath.Dir(path), ".tmp-*")
+	if err != nil {
+		return err
+	}
+	tmpName := tmp.Name()
+	if _, err := tmp.Write(data); err != nil {
+		tmp.Close()
+		os.Remove(tmpName)
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		os.Remove(tmpName)
+		return err
+	}
+	return os.Rename(tmpName, path)
 }
 
 // Dir returns the cache directory.

@@ -30,6 +30,20 @@ func TestLoadFeatureCollection(t *testing.T) {
 	}
 }
 
+func TestLoadRejectsNonFeatureCollection(t *testing.T) {
+	// An HTTP-200 error payload (no "features" array) must error, not silently
+	// become an empty layer.
+	for _, bad := range []string{`{"error":{"code":500,"message":"boom"}}`, `{"type":"Error"}`} {
+		if _, err := LoadFeatureCollection([]byte(bad)); err == nil {
+			t.Errorf("expected error for non-FeatureCollection payload %q", bad)
+		}
+	}
+	// An empty-but-valid collection must succeed.
+	if feats, err := LoadFeatureCollection([]byte(`{"type":"FeatureCollection","features":[]}`)); err != nil || len(feats) != 0 {
+		t.Errorf("empty FC should load with 0 features, got %d err=%v", len(feats), err)
+	}
+}
+
 func TestLoadToleratesInvalidGeometry(t *testing.T) {
 	feats, err := LoadFeatureCollection([]byte(mixedFC))
 	if err != nil {

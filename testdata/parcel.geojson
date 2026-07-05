@@ -1,0 +1,8 @@
+{
+  "type": "Feature",
+  "properties": { "name": "Example lot near Tomar (~3,300 m²)" },
+  "geometry": {
+    "type": "Polygon",
+    "coordinates": [[[-8.4285, 39.6048], [-8.4278, 39.6048], [-8.4278, 39.6053], [-8.4285, 39.6053], [-8.4285, 39.6048]]]
+  }
+}

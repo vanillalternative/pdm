@@ -1,0 +1,14 @@
+# Compiled binary (built at the repo root)
+/pdm
+
+# Test & coverage output
+*.out
+*.test
+coverage.*
+
+# macOS / editor cruft
+.DS_Store
+*.swp
+*.swo
+.idea/
+.vscode/

@@ -54,6 +54,26 @@ func TestPointTomarCentre(t *testing.T) {
 	}
 }
 
+func TestPOACBConstraint(t *testing.T) {
+	eng := newEngine(t)
+	// Inside the Área de Intervenção do POACB (Albufeira de Castelo de Bode).
+	in, err := eng.Point(context.Background(), -8.32522, 39.54334)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c := findConstraint(in.Constraints, "Albufeira Castelo de Bode"); c == nil || !c.Present {
+		t.Errorf("expected POACB present at interior point, got %+v", c)
+	}
+	// Just outside it (~500 m).
+	out, err := eng.Point(context.Background(), -8.27746, 39.58687)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c := findConstraint(out.Constraints, "Albufeira Castelo de Bode"); c == nil || c.Present {
+		t.Errorf("expected POACB absent just outside, got %+v", c)
+	}
+}
+
 func TestPointUnsupportedMunicipality(t *testing.T) {
 	res, err := newEngine(t).Point(context.Background(), -8.60, 39.68) // Ourém
 	if err != nil {

@@ -21,6 +21,9 @@ var (
 
 	//go:embed tomar/ren.geojson
 	TomarREN []byte
+
+	//go:embed tomar/poacb.geojson
+	TomarPOACB []byte
 )
 
 // TomarRegulamento holds the PDM de Tomar written regulation, parsed into

@@ -126,6 +126,7 @@ GeoJSON) over WMS/raster/PDF.
 | Zoning (classificação e qualificação do solo) | DGT **CRUS** | OGC API Features |
 | RAN (Reserva Agrícola Nacional) | DGT/SNIT **SRUP** | OGC API Features |
 | REN (Reserva Ecológica Nacional) | Município de Tomar / Médio Tejo (**MuniSIG**) | ArcGIS REST (GeoJSON) |
+| Albufeira de Castelo de Bode (POACB area) | Município de Tomar (**MuniSIG**), Zonas de Proteção e Salvaguarda | ArcGIS REST (GeoJSON) |
 | Regulation articles (Regulamento) | *Aviso n.º 1510/2022*, DR 2.ª série n.º 16 | [PDF](https://files.dre.pt/2s/2022/01/016000000/0032700390.pdf) → parsed into 103 articles with section context |
 | Plan metadata | PCGT/DGT | [PCGT](https://pcgt.dgterritorio.gov.pt/FDE12471) |
 

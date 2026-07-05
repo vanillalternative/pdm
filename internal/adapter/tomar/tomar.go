@@ -108,6 +108,14 @@ func (a *Adapter) Layers(opts source.Options) []adapter.Layer {
 			Loader:     source.Bundled(data.TomarREN, bundledMeta("Município de Tomar (MuniSIG) — REN", "ren")),
 			Detail:     renDetail,
 		},
+		{
+			ID:         "poacb",
+			Title:      "Albufeira de Castelo de Bode — Área de Intervenção do POACB",
+			Kind:       adapter.KindConstraint,
+			Constraint: "Albufeira Castelo de Bode",
+			Loader:     source.Bundled(data.TomarPOACB, bundledMeta("Município de Tomar (MuniSIG) — POACB", "poacb")),
+			Detail:     func(f spatial.Feature) string { return f.Prop("designacao", "servidao") },
+		},
 	}
 }
 

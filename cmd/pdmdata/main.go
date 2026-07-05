@@ -59,6 +59,7 @@ func run() error {
 		{"zoning", buildZoning},
 		{"ran", buildRAN},
 		{"ren", buildREN},
+		{"poacb", buildPOACB},
 		{"regulamento", buildRegulamento},
 	}
 	for _, t := range targets {
@@ -178,6 +179,29 @@ func buildREN(stamp string) error {
 		Name: "Município de Tomar / Médio Tejo (MuniSIG) — Planta de Condicionantes, REN",
 		URL:  arcBase + "/CondicionantesREN2020/MapServer", Service: "ArcGIS REST (GeoJSON)",
 		RetrievedAt: stamp, Note: "REN typology layers 4–9 combined; tagged by typology.",
+	})
+}
+
+func buildPOACB(stamp string) error {
+	// Área de Intervenção do Plano de Ordenamento da Albufeira de Castelo de Bode
+	// (the "zona de proteção da Albufeira" the PDM Regulamento singles out).
+	feats, err := fetchArcGIS(arcBase + "/OrdenamentoZonasProtecaoSalvaguarda2020/MapServer/4")
+	if err != nil {
+		return err
+	}
+	out := process(feats, opts{
+		precision: 6,
+		inject: map[string]any{
+			"servidao":   "POACB",
+			"designacao": "Área de Intervenção do POACB (Albufeira de Castelo de Bode)",
+		},
+	})
+	return writeFC("data/tomar/poacb.geojson", out, source{
+		Name:        "Município de Tomar / Médio Tejo (MuniSIG) — Área de Intervenção do POACB",
+		URL:         arcBase + "/OrdenamentoZonasProtecaoSalvaguarda2020/MapServer/4",
+		Service:     "ArcGIS REST (GeoJSON)",
+		RetrievedAt: stamp,
+		Note:        "Zona de proteção da Albufeira de Castelo de Bode (Plano de Ordenamento da Albufeira).",
 	})
 }
 

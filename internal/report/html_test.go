@@ -42,6 +42,47 @@ func TestPointHTML(t *testing.T) {
 	}
 }
 
+// TestHTMLEmptyStates: a zoning-only municipality with a failed live fetch
+// yields no zoning and no constraints — both sections must render an explicit
+// placeholder, never an empty table or a bare heading.
+func TestHTMLEmptyStates(t *testing.T) {
+	pt := &model.PointResult{
+		Municipality: "Ourém",
+		Supported:    true,
+		Plan:         &model.PlanInfo{Name: "PDM de Ourém — regime de uso do solo em vigor (CRUS)"},
+		Confidence:   model.ConfidenceLow,
+		Disclaimer:   model.Disclaimer,
+	}
+	var b strings.Builder
+	if err := PointHTML(&b, pt, ""); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(b.String(), "None evaluated for this municipality") {
+		t.Error("point HTML missing empty-constraints placeholder")
+	}
+
+	pg := &model.PolygonResult{
+		Municipality: "Ourém",
+		Supported:    true,
+		Confidence:   model.ConfidenceLow,
+		Disclaimer:   model.Disclaimer,
+	}
+	b.Reset()
+	if err := PolygonHTML(&b, pg, ""); err != nil {
+		t.Fatal(err)
+	}
+	out := b.String()
+	if !strings.Contains(out, "No zoning category matched") {
+		t.Error("polygon HTML missing empty-zoning placeholder")
+	}
+	if strings.Contains(out, "<tbody></tbody>") {
+		t.Error("polygon HTML renders an empty zoning table")
+	}
+	if !strings.Contains(out, "None evaluated for this municipality") {
+		t.Error("polygon HTML missing empty-constraints placeholder")
+	}
+}
+
 func TestParseFormatHTML(t *testing.T) {
 	f, err := ParseFormat("html")
 	if err != nil || f != FormatHTML {

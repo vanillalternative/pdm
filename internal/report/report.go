@@ -186,6 +186,9 @@ func polygonText(w io.Writer, r *model.PolygonResult) error {
 		fmt.Fprintf(b, "  - %s m² / %s%% — %s\n", area(z.AreaM2), pct(z.Percent), z.Label)
 	}
 	fmt.Fprintf(b, "\nConstraints:\n")
+	if len(r.Constraints) == 0 {
+		fmt.Fprintf(b, "  - (none evaluated)\n")
+	}
 	for _, c := range r.Constraints {
 		fmt.Fprintf(b, "  - %s m² / %s%% — %s\n", area(c.AreaM2), pct(c.Percent), c.Type)
 	}
@@ -208,13 +211,23 @@ func polygonMarkdown(w io.Writer, r *model.PolygonResult) error {
 	fmt.Fprintf(b, "- **Analysed area:** %s m²\n", area(r.AnalysedAreaM2))
 	fmt.Fprintf(b, "- **Confidence:** %s\n", r.Confidence)
 	if r.Supported {
-		fmt.Fprintf(b, "\n## Zoning\n\n| Area (m²) | %% | Category |\n|---:|---:|---|\n")
-		for _, z := range r.Zoning {
-			fmt.Fprintf(b, "| %s | %s%% | %s |\n", area(z.AreaM2), pct(z.Percent), z.Label)
+		fmt.Fprintf(b, "\n## Zoning\n\n")
+		if len(r.Zoning) == 0 {
+			fmt.Fprintf(b, "- (none matched)\n")
+		} else {
+			fmt.Fprintf(b, "| Area (m²) | %% | Category |\n|---:|---:|---|\n")
+			for _, z := range r.Zoning {
+				fmt.Fprintf(b, "| %s | %s%% | %s |\n", area(z.AreaM2), pct(z.Percent), z.Label)
+			}
 		}
-		fmt.Fprintf(b, "\n## Constraints\n\n| Area (m²) | %% | Constraint |\n|---:|---:|---|\n")
-		for _, c := range r.Constraints {
-			fmt.Fprintf(b, "| %s | %s%% | %s |\n", area(c.AreaM2), pct(c.Percent), c.Type)
+		fmt.Fprintf(b, "\n## Constraints\n\n")
+		if len(r.Constraints) == 0 {
+			fmt.Fprintf(b, "- (none evaluated)\n")
+		} else {
+			fmt.Fprintf(b, "| Area (m²) | %% | Constraint |\n|---:|---:|---|\n")
+			for _, c := range r.Constraints {
+				fmt.Fprintf(b, "| %s | %s%% | %s |\n", area(c.AreaM2), pct(c.Percent), c.Type)
+			}
 		}
 	}
 	mdRegulation(b, r.Regulation)

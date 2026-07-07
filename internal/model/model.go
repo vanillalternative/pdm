@@ -116,6 +116,7 @@ type ConstraintHit struct {
 type PointResult struct {
 	Input        Coordinate      `json:"input"`
 	Municipality string          `json:"municipality"`
+	Freguesia    string          `json:"freguesia,omitempty"`
 	Supported    bool            `json:"supported"`
 	Plan         *PlanInfo       `json:"plan,omitempty"`
 	Zoning       []ZoningHit     `json:"zoning"`
@@ -131,6 +132,7 @@ type PointResult struct {
 // PolygonResult answers "what applies across this parcel?".
 type PolygonResult struct {
 	Municipality   string          `json:"municipality"`
+	Freguesia      string          `json:"freguesia,omitempty"`
 	Supported      bool            `json:"supported"`
 	Plan           *PlanInfo       `json:"plan,omitempty"`
 	AnalysedAreaM2 float64         `json:"analysed_area_m2"`

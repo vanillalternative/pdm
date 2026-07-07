@@ -51,7 +51,8 @@ func (o Options) client() *http.Client {
 	if o.HTTP != nil {
 		return o.HTTP
 	}
-	return &http.Client{Timeout: 30 * time.Second}
+	// The public geoservices can take >30s to first byte when cold.
+	return &http.Client{Timeout: 60 * time.Second}
 }
 
 const userAgent = "pdm/0.1 (+https://github.com/bernardosimoes/pdm) planning-data-query"
@@ -152,6 +153,7 @@ func WFS(cfg WFSConfig, opts Options) Loader {
 		if err != nil {
 			return Loaded{}, fmt.Errorf("WFS %s: %w", cfg.TypeName, err)
 		}
+		cachePut(opts, reqURL, data, fetchedAt, fromCache)
 		m := cfg.Meta
 		m.URL = reqURL
 		m.Provenance = provenanceForFetch(fromCache)
@@ -217,6 +219,7 @@ func OGC(cfg OGCConfig, opts Options) Loader {
 			if err != nil {
 				return Loaded{}, fmt.Errorf("OGC items: %w", err)
 			}
+			cachePut(opts, next, data, fetchedAt, fromCache)
 			all = append(all, feats...)
 			next = resolveRef(next, nextLink(data))
 		}
@@ -274,37 +277,71 @@ func provenanceForFetch(fromCache bool) model.Provenance {
 	return model.ProvenanceOfficialLive
 }
 
-// fetch performs a cached HTTP GET, returning the body, the effective fetch
-// time (cache time on a hit, now on a miss), and whether it came from cache.
+// fetch performs an HTTP GET (serving from cache when possible), returning the
+// body, the effective fetch time (cache time on a hit, now on a miss), and
+// whether it came from cache. Live responses are NOT cached here: callers cache
+// via cachePut only after the body parses, so a transient garbage response
+// (maintenance page, truncated body) can never poison the cache for its TTL.
+// Transient failures are retried: the public geoservices are slow when cold and
+// intermittently answer 5xx.
 func fetch(ctx context.Context, opts Options, reqURL string) ([]byte, time.Time, bool, error) {
 	if opts.Cache != nil {
 		if e, ok := opts.Cache.Get(reqURL); ok {
 			return e.Data, e.FetchedAt, true, nil
 		}
 	}
+	var lastErr error
+	for attempt := 0; attempt < 3; attempt++ {
+		if attempt > 0 {
+			select {
+			case <-ctx.Done():
+				return nil, time.Time{}, false, ctx.Err()
+			case <-time.After(time.Duration(attempt) * 2 * time.Second):
+			}
+		}
+		body, retryable, err := fetchOnce(ctx, opts, reqURL)
+		if err == nil {
+			return body, timeNow(), false, nil
+		}
+		lastErr = err
+		if !retryable {
+			break
+		}
+	}
+	return nil, time.Time{}, false, lastErr
+}
+
+// fetchOnce performs a single GET. retryable reports whether the failure is
+// transient (network error, 5xx, or 429) and worth another attempt.
+func fetchOnce(ctx context.Context, opts Options, reqURL string) (body []byte, retryable bool, err error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
 	if err != nil {
-		return nil, time.Time{}, false, err
+		return nil, false, err
 	}
 	req.Header.Set("User-Agent", userAgent)
 	req.Header.Set("Accept", "application/json, application/geo+json")
 	resp, err := opts.client().Do(req)
 	if err != nil {
-		return nil, time.Time{}, false, fmt.Errorf("GET %s: %w", trim(reqURL), err)
+		return nil, ctx.Err() == nil, fmt.Errorf("GET %s: %w", trim(reqURL), err)
 	}
 	defer resp.Body.Close()
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 64<<20))
+	body, err = io.ReadAll(io.LimitReader(resp.Body, 64<<20))
 	if err != nil {
-		return nil, time.Time{}, false, err
+		return nil, ctx.Err() == nil, err
 	}
 	if resp.StatusCode != http.StatusOK {
-		return nil, time.Time{}, false, fmt.Errorf("GET %s: status %d", trim(reqURL), resp.StatusCode)
+		transient := resp.StatusCode >= 500 || resp.StatusCode == http.StatusTooManyRequests
+		return nil, transient, fmt.Errorf("GET %s: status %d", trim(reqURL), resp.StatusCode)
 	}
-	now := timeNow()
-	if opts.Cache != nil {
-		_ = opts.Cache.Put(reqURL, reqURL, body, now)
+	return body, false, nil
+}
+
+// cachePut stores a successfully parsed live response. No-op for cache hits.
+func cachePut(opts Options, reqURL string, data []byte, fetchedAt time.Time, fromCache bool) {
+	if opts.Cache == nil || fromCache {
+		return
 	}
-	return body, now, false, nil
+	_ = opts.Cache.Put(reqURL, reqURL, data, fetchedAt)
 }
 
 func trim(s string) string {

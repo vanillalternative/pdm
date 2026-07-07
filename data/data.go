@@ -11,6 +11,12 @@ import _ "embed"
 //go:embed municipalities.geojson
 var Municipalities []byte
 
+// Freguesias holds freguesia boundaries for labelling results (CAOP, heavily
+// simplified — resolution accuracy ~50 m).
+//
+//go:embed freguesias.geojson
+var Freguesias []byte
+
 // Tomar pilot planning layers.
 var (
 	//go:embed tomar/ordenamento.geojson

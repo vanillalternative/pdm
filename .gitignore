@@ -1,10 +1,16 @@
-# Compiled binary (built at the repo root)
+# Compiled binaries (built at the repo root)
 /pdm
+/pdmdata
 
 # Test & coverage output
 *.out
 *.test
 coverage.*
+
+# Local screenshots, scratch reports and browser-automation cruft
+*.png
+/test.html
+.playwright-mcp/
 
 # macOS / editor cruft
 .DS_Store

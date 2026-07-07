@@ -23,14 +23,21 @@ import (
 
 // Engine performs planning queries.
 type Engine struct {
-	resolver *admin.Resolver
-	opts     source.Options
-	now      func() time.Time
+	resolver   *admin.Resolver
+	freguesias *admin.FreguesiaResolver // optional, labels results
+	opts       source.Options
+	now        func() time.Time
 }
 
 // New builds an Engine from a municipality resolver and runtime options.
 func New(resolver *admin.Resolver, opts source.Options) *Engine {
 	return &Engine{resolver: resolver, opts: opts, now: time.Now}
+}
+
+// SetFreguesias attaches an optional freguesia resolver used to label results
+// with the freguesia name.
+func (e *Engine) SetFreguesias(r *admin.FreguesiaResolver) {
+	e.freguesias = r
 }
 
 // Point answers a coordinate query.
@@ -48,25 +55,24 @@ func (e *Engine) Point(ctx context.Context, lon, lat float64) (*model.PointResul
 	if !ok {
 		res.Municipality = "(undetermined)"
 		res.Confidence = model.ConfidenceLow
-		res.Notes = append(res.Notes,
-			"Coordinate is outside the bundled administrative coverage; municipality could not be determined.")
+		res.Notes = append(res.Notes, undeterminedNote(lon, lat))
 		return res, nil
 	}
-	res.Municipality = muni
+	res.Municipality = muni.Name
+	if e.freguesias != nil {
+		res.Freguesia, _ = e.freguesias.ResolvePoint(lon, lat)
+	}
 
-	ad, ok := registry.Lookup(muni)
-	if !ok {
-		res.Supported = false
-		res.Confidence = model.ConfidenceLow
-		res.Notes = append(res.Notes, unsupportedNote(muni))
-		return res, nil
-	}
+	ad, dedicated := registry.Resolve(muni.Name, muni.Code)
 	res.Supported = true
+	if !dedicated {
+		res.Notes = append(res.Notes, zoningOnlyNote(muni.Name))
+	}
 	plan := ad.Plan()
 	res.Plan = &plan
 
 	opts := e.opts
-	bb := pointBBox(lon, lat, 0.03)
+	bb := pointBBox(lon, lat, 0.005)
 	opts.BBox = &bb
 
 	pt := spatial.Point(lon, lat)
@@ -150,11 +156,14 @@ func (e *Engine) Polygon(ctx context.Context, g geom.Geometry) (*model.PolygonRe
 		res.AnalysedAreaM2 = crs.AreaM2(g)
 		res.Municipality = "(undetermined)"
 		res.Confidence = model.ConfidenceLow
-		res.Notes = append(res.Notes,
-			"Polygon does not overlap the bundled administrative coverage; municipality could not be determined.")
+		cx, cy := centroid(g)
+		res.Notes = append(res.Notes, undeterminedNote(cx, cy))
 		return res, nil
 	}
-	res.Municipality = best.Municipality
+	res.Municipality = best.Municipality.Name
+	if e.freguesias != nil {
+		res.Freguesia, _ = e.freguesias.ResolvePolygon(g)
+	}
 	// Analyse only the portion inside the resolved municipality, so zoning and
 	// constraint percentages are shares of the analysed area — not of a parcel
 	// that may straddle a boundary into unanalysed municipalities.
@@ -164,14 +173,11 @@ func (e *Engine) Polygon(ctx context.Context, g geom.Geometry) (*model.PolygonRe
 		res.Notes = append(res.Notes, straddleNote(best, overlaps))
 	}
 
-	ad, ok := registry.Lookup(best.Municipality)
-	if !ok {
-		res.Supported = false
-		res.Confidence = model.ConfidenceLow
-		res.Notes = append(res.Notes, unsupportedNote(best.Municipality))
-		return res, nil
-	}
+	ad, dedicated := registry.Resolve(best.Municipality.Name, best.Municipality.Code)
 	res.Supported = true
+	if !dedicated {
+		res.Notes = append(res.Notes, zoningOnlyNote(best.Municipality.Name))
+	}
 	plan := ad.Plan()
 	res.Plan = &plan
 
@@ -225,17 +231,14 @@ func (e *Engine) PointMap(ctx context.Context, lon, lat float64) *mapview.Data {
 	if !ok {
 		return nil
 	}
-	ad, ok := registry.Lookup(muni)
-	if !ok {
-		return nil
-	}
+	ad, _ := registry.Resolve(muni.Name, muni.Code)
 	view := viewAround(lon, lat, 3000)
 	d := &mapview.Data{Subject: spatial.Point(lon, lat), SubjectKind: "point"}
 	d.MinLon, d.MinLat, d.MaxLon, d.MaxLat = view.minLon, view.minLat, view.maxLon, view.maxLat
 
 	if b, ok := e.resolver.BoundaryAt(lon, lat); ok {
 		if bc := clipTo(b, view.rect); !bc.IsEmpty() {
-			d.Layers = append(d.Layers, mapview.Layer{ID: "boundary", Label: "Município de " + muni, Role: mapview.RoleBoundary, G: bc})
+			d.Layers = append(d.Layers, mapview.Layer{ID: "boundary", Label: "Município de " + muni.Name, Role: mapview.RoleBoundary, G: bc})
 		}
 	}
 
@@ -294,10 +297,7 @@ func (e *Engine) PolygonMap(ctx context.Context, g geom.Geometry) *mapview.Data 
 	if !ok {
 		return nil
 	}
-	ad, ok := registry.Lookup(best.Municipality)
-	if !ok {
-		return nil
-	}
+	ad, _ := registry.Resolve(best.Municipality.Name, best.Municipality.Code)
 	min, max, _ := g.Envelope().MinMaxXYs()
 	cx, cy := (min.X+max.X)/2, (min.Y+max.Y)/2
 	// view spans the parcel plus a margin
@@ -308,7 +308,7 @@ func (e *Engine) PolygonMap(ctx context.Context, g geom.Geometry) *mapview.Data 
 
 	if b, ok := e.resolver.BoundaryAt(cx, cy); ok {
 		if bc := clipTo(b, view.rect); !bc.IsEmpty() {
-			d.Layers = append(d.Layers, mapview.Layer{ID: "boundary", Label: "Município de " + best.Municipality, Role: mapview.RoleBoundary, G: bc})
+			d.Layers = append(d.Layers, mapview.Layer{ID: "boundary", Label: "Município de " + best.Municipality.Name, Role: mapview.RoleBoundary, G: bc})
 		}
 	}
 	opts := e.opts
@@ -516,16 +516,47 @@ func geomBBox(g geom.Geometry, pad float64) source.BBox {
 	}
 }
 
-func unsupportedNote(muni string) string {
-	sup := registry.Supported()
-	return fmt.Sprintf("Municipality %q detected but not yet supported. Supported: %v.", muni, sup)
+// zoningOnlyNote explains what a generic (no dedicated adapter) result does and
+// does not cover. It must be honest: the missing constraint layers are exactly
+// what a per-municipality adapter adds.
+func zoningOnlyNote(muni string) string {
+	return fmt.Sprintf(
+		"Only zoning was checked for %s (from the national DGT CRUS dataset, fetched live and cached). "+
+			"Constraint layers (RAN, REN, servidões e restrições) and the written regulation (Regulamento) "+
+			"are not yet integrated for this municipality — do not read the absence of constraints as their inexistence.",
+		muni)
+}
+
+// undeterminedNote explains why no municipality matched, calling out the
+// autonomous regions (not covered by the mainland CAOP/CRUS datasets).
+func undeterminedNote(lon, lat float64) string {
+	switch {
+	case lon >= -31.5 && lon <= -24.5 && lat >= 36.5 && lat <= 40.0:
+		return "The location is in the Autonomous Region of the Azores, which the mainland DGT datasets (CAOP/CRUS) " +
+			"do not cover; the regional planning services are not yet integrated."
+	case lon >= -17.5 && lon <= -15.5 && lat >= 29.9 && lat <= 33.5:
+		return "The location is in the Autonomous Region of Madeira, which the mainland DGT datasets (CAOP/CRUS) " +
+			"do not cover; the regional planning services are not yet integrated."
+	default:
+		return "The location is outside the bundled administrative coverage (mainland Portugal, CAOP); " +
+			"the municipality could not be determined."
+	}
+}
+
+// centroid returns the centre of a geometry's envelope (fallback 0,0).
+func centroid(g geom.Geometry) (lon, lat float64) {
+	min, max, ok := g.Envelope().MinMaxXYs()
+	if !ok {
+		return 0, 0
+	}
+	return (min.X + max.X) / 2, (min.Y + max.Y) / 2
 }
 
 func straddleNote(best admin.Overlap, overlaps []admin.Overlap) string {
 	return fmt.Sprintf(
 		"Polygon straddles %d municipalities; analysing the majority one (%s, %.1f%% of area). "+
 			"Results for the remainder are not included.",
-		len(overlaps), best.Municipality, best.Percent)
+		len(overlaps), best.Municipality.Name, best.Percent)
 }
 
 func isSample(s model.Source) bool { return s.Provenance == model.ProvenanceSample }

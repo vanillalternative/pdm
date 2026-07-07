@@ -40,6 +40,9 @@ func PointHTML(w io.Writer, r *model.PointResult, mapFigure string) error {
 
 	// Constraints
 	b.WriteString(`<section><h2>Constraints</h2><div class="chips">`)
+	if len(r.Constraints) == 0 {
+		b.WriteString(`<p class="muted">None evaluated for this municipality — see the notes below.</p>`)
+	}
 	for _, c := range r.Constraints {
 		chip(b, c.Type, c.Present, c.Detail, "")
 	}
@@ -71,13 +74,22 @@ func PolygonHTML(w io.Writer, r *model.PolygonResult, mapFigure string) error {
 		b.WriteString(mapFigure)
 	}
 
-	b.WriteString(`<section><h2>Zoning</h2><table><thead><tr><th>Category</th><th class="num">Area</th><th class="num">%</th></tr></thead><tbody>`)
-	for _, z := range r.Zoning {
-		fmt.Fprintf(b, `<tr><td>%s</td><td class="num">%s m²</td><td class="num">%s%%</td></tr>`, h(z.Label), area(z.AreaM2), pct(z.Percent))
+	b.WriteString(`<section><h2>Zoning</h2>`)
+	if len(r.Zoning) == 0 {
+		b.WriteString(`<p class="muted">No zoning category matched.</p>`)
+	} else {
+		b.WriteString(`<table><thead><tr><th>Category</th><th class="num">Area</th><th class="num">%</th></tr></thead><tbody>`)
+		for _, z := range r.Zoning {
+			fmt.Fprintf(b, `<tr><td>%s</td><td class="num">%s m²</td><td class="num">%s%%</td></tr>`, h(z.Label), area(z.AreaM2), pct(z.Percent))
+		}
+		b.WriteString(`</tbody></table>`)
 	}
-	b.WriteString(`</tbody></table></section>`)
+	b.WriteString(`</section>`)
 
 	b.WriteString(`<section><h2>Constraints</h2><div class="chips">`)
+	if len(r.Constraints) == 0 {
+		b.WriteString(`<p class="muted">None evaluated for this municipality — see the notes below.</p>`)
+	}
 	for _, c := range r.Constraints {
 		extra := ""
 		if c.Present {
@@ -154,7 +166,7 @@ func regulationHTML(b *strings.Builder, reg *model.Regulation) {
 		b.WriteString(`<p class="muted">No section-specific article matched; consult the full regulation.</p>`)
 	}
 	for _, a := range reg.Articles {
-		fmt.Fprintf(b, `<details class="art"><summary><span class="art-n">Art. %s</span> %s`, h(a.Number), h(a.Title))
+		fmt.Fprintf(b, `<details class="art" id="%s"><summary><span class="art-n">Art. %s</span> %s`, h(artID(a.Number)), h(a.Number), h(a.Title))
 		if a.Section != "" {
 			fmt.Fprintf(b, ` <span class="art-s">%s</span>`, h(a.Section))
 		}
@@ -191,6 +203,12 @@ func disclaimerHTML(b *strings.Builder, d string) {
 		return
 	}
 	fmt.Fprintf(b, `<footer>%s</footer>`, h(d))
+}
+
+// artID derives a stable fragment id for an article number, so analysis
+// citations can deep-link to the verbatim article.
+func artID(number string) string {
+	return "art-" + strings.ReplaceAll(number, " ", "-")
 }
 
 func h(s string) string {
@@ -297,6 +315,23 @@ td{padding:8px;border-bottom:1px solid var(--hair);font-variant-numeric:tabular-
 .srcs li{padding:6px 0;border-bottom:1px solid var(--hair)}
 .prov{font:600 11px ui-monospace,Menlo,monospace;color:var(--muted);margin-left:6px}
 .notes ul{padding-left:18px;color:var(--muted);font-size:14px}
+/* AI analysis */
+.ai-badge{color:var(--accent)}
+.viability{display:flex;gap:14px;align-items:flex-start;margin:18px 0;padding:14px 16px;border:1px solid var(--hair);
+ border-radius:14px;background:var(--panel)}
+.viability p{margin:0;font-size:15px}
+.v-tag{flex:none;font:600 12px ui-monospace,Menlo,monospace;text-transform:uppercase;letter-spacing:.06em;
+ padding:.3em .7em;border-radius:999px;border:1px solid var(--hair)}
+.v-favoravel .v-tag{background:var(--good-bg);color:var(--good)}
+.v-condicionado .v-tag,.v-desfavoravel .v-tag{background:var(--warn-bg);color:var(--warn)}
+.v-indeterminado .v-tag{color:var(--muted)}
+.ai-sec{margin:18px 0}
+.ai-sec h3{font-size:15px;margin:0 0 6px}
+.ai-sec p{margin:.4em 0;font-size:14.5px}
+.ai-notes{color:var(--muted);font-size:13.5px;border-left:2px solid var(--hair);padding-left:10px}
+.loc th{width:40%;font-weight:600;text-transform:none;letter-spacing:0;font-family:inherit;font-size:14px;color:var(--ink)}
+.cites{list-style:none;padding:0;margin:0;font-size:14px}
+.cites li{padding:6px 0;border-bottom:1px solid var(--hair)}
 a{color:var(--accent)}
 footer{margin-top:28px;padding-top:16px;border-top:1px solid var(--hair);color:var(--muted);font-size:12.5px;line-height:1.6}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}

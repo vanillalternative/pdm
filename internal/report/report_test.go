@@ -1,6 +1,11 @@
 package report
 
-import "testing"
+import (
+	"strings"
+	"testing"
+
+	"github.com/bernardosimoes/pdm/internal/model"
+)
 
 func TestGroupThousands(t *testing.T) {
 	cases := map[int64]string{
@@ -29,6 +34,38 @@ func TestPct(t *testing.T) {
 	}
 	if got := pct(100); got != "100.0" {
 		t.Errorf("pct=%q", got)
+	}
+}
+
+// TestPolygonEmptyStates: text and markdown polygon reports for a zoning-only
+// result with nothing matched must print placeholders, not bare headings or a
+// header-only table.
+func TestPolygonEmptyStates(t *testing.T) {
+	r := &model.PolygonResult{
+		Municipality: "Ourém",
+		Supported:    true,
+		Confidence:   model.ConfidenceLow,
+		Disclaimer:   model.Disclaimer,
+	}
+	var b strings.Builder
+	if err := Polygon(&b, r, FormatText); err != nil {
+		t.Fatal(err)
+	}
+	txt := b.String()
+	if !strings.Contains(txt, "(none matched)") || !strings.Contains(txt, "(none evaluated)") {
+		t.Errorf("text polygon report missing empty-state placeholders:\n%s", txt)
+	}
+
+	b.Reset()
+	if err := Polygon(&b, r, FormatMarkdown); err != nil {
+		t.Fatal(err)
+	}
+	md := b.String()
+	if !strings.Contains(md, "(none matched)") || !strings.Contains(md, "(none evaluated)") {
+		t.Errorf("markdown polygon report missing empty-state placeholders:\n%s", md)
+	}
+	if strings.Contains(md, "|---:") {
+		t.Errorf("markdown polygon report renders a header-only table:\n%s", md)
 	}
 }
 

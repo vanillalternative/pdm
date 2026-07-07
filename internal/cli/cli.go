@@ -15,6 +15,7 @@ import (
 
 	"github.com/bernardosimoes/pdm/data"
 	"github.com/bernardosimoes/pdm/internal/admin"
+	"github.com/bernardosimoes/pdm/internal/ai"
 	"github.com/bernardosimoes/pdm/internal/cache"
 	"github.com/bernardosimoes/pdm/internal/query"
 	"github.com/bernardosimoes/pdm/internal/registry"
@@ -34,12 +35,14 @@ USAGE:
   pdm point <lat> <lon>           query a coordinate
   pdm polygon <file.geojson>      query a parcel polygon
   pdm report <file.geojson|lat lon> [--format ...]   full report
-  pdm supported                   list supported municipalities
+  pdm analyse <file.geojson|lat lon> [--tier ...]    AI-written analysis report
+  pdm supported                   show municipality coverage/support levels
   pdm version                     print version
   pdm help                        show this help
 
 OPTIONS:
-  --format <text|json|markdown|html>   output format (default: text)
+  --format <text|json|markdown|html>   output format (default: text; analyse: html)
+  --tier <basic|premium>          analysis model tier (default: basic)
   --live                          fetch from official geoservices (falls back to bundled)
   --no-cache                      do not read/write the local cache
   --cache-dir <dir>               override the cache directory
@@ -50,22 +53,27 @@ EXAMPLES:
   pdm polygon ./parcel.geojson
   pdm report ./parcel.geojson --format json
   pdm report 39.60 -8.41 --format markdown
+  pdm analyse 39.60 -8.41 --tier premium > analysis.html
+
+NOTE: "pdm analyse" calls the Anthropic API and needs ANTHROPIC_API_KEY set.
 
 NOTE: coordinates are latitude then longitude, in WGS84 decimal degrees.
       Portuguese longitudes are negative (west of Greenwich).
 `
 
 type options struct {
-	format   report.Format
-	live     bool
-	noCache  bool
-	cacheDir string
+	format    report.Format
+	formatSet bool
+	tier      string
+	live      bool
+	noCache   bool
+	cacheDir  string
 }
 
 // Run parses args (excluding the program name) and executes, returning an exit
 // code.
 func Run(args []string, stdout, stderr io.Writer) int {
-	opts := options{format: report.FormatText}
+	opts := options{format: report.FormatText, tier: string(ai.TierBasic)}
 	positionals, err := parse(args, &opts)
 	if err != nil {
 		fmt.Fprintf(stderr, "error: %v\n\n%s", err, usage)
@@ -88,17 +96,15 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stdout, "pdm %s\n", Version)
 		return 0
 	case "supported":
-		fmt.Fprintf(stdout, "Supported municipalities:\n")
-		for _, m := range registry.Supported() {
-			fmt.Fprintf(stdout, "  - %s\n", m)
-		}
-		return 0
+		return runSupported(stdout, stderr)
 	case "point":
 		return runPoint(rest, opts, stdout, stderr)
 	case "polygon":
 		return runPolygon(rest, opts, stdout, stderr)
 	case "report":
 		return runReport(rest, opts, stdout, stderr)
+	case "analyse", "analyze":
+		return runAnalyse(rest, opts, stdout, stderr)
 	default:
 		// Shorthand: `pdm <lat> <lon>` or `pdm <file.geojson>`.
 		return runInferred(positionals, opts, stdout, stderr)
@@ -120,6 +126,23 @@ func runInferred(positionals []string, opts options, stdout, stderr io.Writer) i
 	}
 	fmt.Fprintf(stderr, "error: unrecognized command %q\n\n%s", positionals[0], usage)
 	return 2
+}
+
+func runSupported(stdout, stderr io.Writer) int {
+	count := 0
+	if resolver, err := admin.NewResolver(data.Municipalities); err == nil {
+		count = resolver.Count()
+	}
+	fmt.Fprintf(stdout, "Fully integrated municipalities (zoning + constraints + regulation):\n")
+	for _, m := range registry.Supported() {
+		fmt.Fprintf(stdout, "  - %s\n", m)
+	}
+	fmt.Fprintf(stdout, "\nEvery other mainland municipality (%d total in CAOP) is supported for zoning:\n", count)
+	fmt.Fprintf(stdout, "  the national DGT CRUS dataset is queried live (and cached locally).\n")
+	fmt.Fprintf(stdout, "  Constraint layers (RAN, REN, servidões) and the Regulamento are added\n")
+	fmt.Fprintf(stdout, "  per municipality.\n")
+	fmt.Fprintf(stdout, "\nAzores and Madeira are not yet covered (regional services pending).\n")
+	return 0
 }
 
 func runPoint(args []string, opts options, stdout, stderr io.Writer) int {
@@ -146,7 +169,9 @@ func runPoint(args []string, opts options, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "error: %v\n", err)
 		return 1
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	// Generous timeout: municipalities without bundled data fetch zoning live
+	// from the DGT geoservices, which can be slow to first byte when cold.
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancel()
 	res, err := eng.Point(ctx, lon, lat)
 	if err != nil {
@@ -177,18 +202,7 @@ func runPolygon(args []string, opts options, stdout, stderr io.Writer) int {
 		return 2
 	}
 	path := args[0]
-	var g geom.Geometry
-	var err error
-	if path == "-" {
-		data, rerr := io.ReadAll(os.Stdin)
-		if rerr != nil {
-			fmt.Fprintf(stderr, "error: reading stdin: %v\n", rerr)
-			return 1
-		}
-		g, err = spatial.ParseInputGeometry(data)
-	} else {
-		g, err = spatial.LoadInputGeometry(path)
-	}
+	g, err := loadInput(path)
 	if err != nil {
 		fmt.Fprintf(stderr, "error: reading %s: %v\n", path, err)
 		return 1
@@ -223,6 +237,18 @@ func runPolygon(args []string, opts options, stdout, stderr io.Writer) int {
 	return 0
 }
 
+// loadInput reads an input geometry from a GeoJSON file or stdin ("-").
+func loadInput(path string) (geom.Geometry, error) {
+	if path == "-" {
+		data, err := io.ReadAll(os.Stdin)
+		if err != nil {
+			return geom.Geometry{}, fmt.Errorf("reading stdin: %w", err)
+		}
+		return spatial.ParseInputGeometry(data)
+	}
+	return spatial.LoadInputGeometry(path)
+}
+
 // runReport accepts either a GeoJSON file (polygon) or two coordinates (point).
 func runReport(args []string, opts options, stdout, stderr io.Writer) int {
 	if len(args) >= 2 {
@@ -239,6 +265,130 @@ func runReport(args []string, opts options, stdout, stderr io.Writer) int {
 	return 2
 }
 
+// newGenerator builds the AI client for a tier. It is a package variable so
+// tests can substitute a stub generator.
+var newGenerator = func(tier ai.Tier) (ai.Generator, error) {
+	return ai.New(tier)
+}
+
+// runAnalyse queries a point or parcel and produces an AI-written analysis
+// report grounded in the query result.
+func runAnalyse(args []string, opts options, stdout, stderr io.Writer) int {
+	tier, err := ai.ParseTier(opts.tier)
+	if err != nil {
+		fmt.Fprintf(stderr, "error: %v\n", err)
+		return 2
+	}
+	if !opts.formatSet {
+		opts.format = report.FormatHTML
+	}
+	if opts.format == report.FormatText {
+		fmt.Fprintf(stderr, "error: analyse supports --format html, markdown, or json\n")
+		return 2
+	}
+
+	// Fail fast (missing/empty ANTHROPIC_API_KEY) before running the query.
+	gen, err := newGenerator(tier)
+	if err != nil {
+		fmt.Fprintf(stderr, "error: %v\n", err)
+		return 1
+	}
+	eng, err := buildEngine(opts)
+	if err != nil {
+		fmt.Fprintf(stderr, "error: %v\n", err)
+		return 1
+	}
+	// Wider timeout than plain queries: it spans a possible live zoning fetch
+	// plus the model generation.
+	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Second)
+	defer cancel()
+
+	var (
+		view    report.AnalysisView
+		payload ai.Payload
+		result  any
+		mapSVG  string
+	)
+	switch {
+	case len(args) >= 2 && isFloat(args[0]) && isFloat(args[1]):
+		lat, _ := strconv.ParseFloat(args[0], 64)
+		lon, _ := strconv.ParseFloat(args[1], 64)
+		if err := validateLatLon(lat, lon); err != nil {
+			fmt.Fprintf(stderr, "error: %v\n", err)
+			return 2
+		}
+		res, err := eng.Point(ctx, lon, lat)
+		if err != nil {
+			fmt.Fprintf(stderr, "error: %v\n", err)
+			return 1
+		}
+		if payload, err = ai.BuildPointPayload(res); err != nil {
+			fmt.Fprintf(stderr, "error: %v\n", err)
+			return 1
+		}
+		view, result = report.NewPointAnalysisView(res), res
+		if opts.format == report.FormatHTML {
+			if m := eng.PointMap(ctx, lon, lat); m != nil {
+				mapSVG = m.SVG()
+			}
+		}
+	case len(args) >= 1 && (args[0] == "-" || fileExists(args[0])):
+		g, err := loadInput(args[0])
+		if err != nil {
+			fmt.Fprintf(stderr, "error: reading %s: %v\n", args[0], err)
+			return 1
+		}
+		res, err := eng.Polygon(ctx, g)
+		if err != nil {
+			fmt.Fprintf(stderr, "error: %v\n", err)
+			return 1
+		}
+		if payload, err = ai.BuildPolygonPayload(res); err != nil {
+			fmt.Fprintf(stderr, "error: %v\n", err)
+			return 1
+		}
+		view, result = report.NewPolygonAnalysisView(res), res
+		if opts.format == report.FormatHTML {
+			if m := eng.PolygonMap(ctx, g); m != nil {
+				mapSVG = m.SVG()
+			}
+		}
+	default:
+		fmt.Fprintf(stderr, "error: analyse needs a GeoJSON file or <lat> <lon>\n")
+		return 2
+	}
+
+	fmt.Fprintf(stderr, "generating %s analysis (%s)…\n", tier, ai.ModelFor(tier))
+	analysis, err := gen.Generate(ctx, payload)
+	if err != nil {
+		fmt.Fprintf(stderr, "error: %v\n", err)
+		return 1
+	}
+
+	tierLabel := fmt.Sprintf("análise AI · %s · %s", tier, ai.ModelFor(tier))
+	switch opts.format {
+	case report.FormatJSON:
+		err = report.JSON(stdout, struct {
+			Result   any          `json:"result"`
+			Analysis *ai.Analysis `json:"analysis"`
+		}{result, analysis})
+	case report.FormatMarkdown:
+		err = report.AnalysisMarkdown(stdout, view, analysis, payload.DataGaps, tierLabel)
+	default:
+		err = report.AnalysisHTML(stdout, view, analysis, payload.DataGaps, mapSVG, tierLabel)
+	}
+	if err != nil {
+		fmt.Fprintf(stderr, "error: %v\n", err)
+		return 1
+	}
+	return 0
+}
+
+func isFloat(s string) bool {
+	_, err := strconv.ParseFloat(s, 64)
+	return err == nil
+}
+
 func buildEngine(opts options) (*query.Engine, error) {
 	resolver, err := admin.NewResolver(data.Municipalities)
 	if err != nil {
@@ -253,7 +403,12 @@ func buildEngine(opts options) (*query.Engine, error) {
 		return nil, fmt.Errorf("init cache: %w", err)
 	}
 	so := source.Options{Live: opts.live, Cache: c}
-	return query.New(resolver, so), nil
+	eng := query.New(resolver, so)
+	// Freguesia labelling is optional — a broken dataset must not block queries.
+	if fr, err := admin.NewFreguesiaResolver(data.Freguesias); err == nil {
+		eng.SetFreguesias(fr)
+	}
+	return eng, nil
 }
 
 func validateLatLon(lat, lon float64) error {
@@ -299,6 +454,13 @@ func parse(args []string, opts *options) ([]string, error) {
 					return nil, err
 				}
 				opts.format = fm
+				opts.formatSet = true
+			case "tier":
+				v, err := needValue(name, val, hasInline, args, &i)
+				if err != nil {
+					return nil, err
+				}
+				opts.tier = v
 			case "cache-dir":
 				v, err := needValue(name, val, hasInline, args, &i)
 				if err != nil {

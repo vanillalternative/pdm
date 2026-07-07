@@ -10,13 +10,17 @@ import (
 
 	"github.com/bernardosimoes/pdm/data"
 	"github.com/bernardosimoes/pdm/internal/adapter"
+	"github.com/bernardosimoes/pdm/internal/adapter/crus"
 	"github.com/bernardosimoes/pdm/internal/model"
 	"github.com/bernardosimoes/pdm/internal/reg"
 	"github.com/bernardosimoes/pdm/internal/source"
 	"github.com/bernardosimoes/pdm/internal/spatial"
 )
 
-const ogc = "https://ogcapi.dgterritorio.gov.pt/collections"
+const (
+	ogc  = "https://ogcapi.dgterritorio.gov.pt/collections"
+	dtcc = "1418" // CAOP dtmn code for Tomar
+)
 
 // Adapter serves the municipality of Tomar.
 type Adapter struct{}
@@ -90,7 +94,7 @@ func (a *Adapter) Layers(opts source.Options) []adapter.Layer {
 			Title:    "Ordenamento — classificação e qualificação do solo (CRUS/PDM)",
 			Kind:     adapter.KindZoning,
 			Loader:   ordenamentoLoader(opts),
-			Classify: classifyOrdenamento,
+			Classify: crus.Classify,
 		},
 		{
 			ID:         "ran",
@@ -119,18 +123,14 @@ func (a *Adapter) Layers(opts source.Options) []adapter.Layer {
 	}
 }
 
-// ordenamentoLoader: live DGT CRUS (bbox-filtered) first, then bundled snapshot.
+// ordenamentoLoader: live DGT CRUS (dtcc+bbox filtered) first, then bundled
+// snapshot.
 func ordenamentoLoader(opts source.Options) source.Loader {
 	bundled := source.Bundled(data.TomarOrdenamento, bundledMeta("DGT CRUS — ordenamento do solo (Tomar)", "ordenamento"))
 	if !opts.Live {
 		return bundled
 	}
-	live := source.OGC(source.OGCConfig{
-		ItemsURL: ogc + "/crus/items",
-		UseBBox:  true,
-		Meta:     model.Source{Name: "DGT/SNIT — CRUS (ordenamento do solo)", Layer: "ordenamento"},
-	}, opts)
-	return source.Fallback(live, bundled)
+	return source.Fallback(crus.LiveLoader(dtcc, "Tomar", opts), bundled)
 }
 
 // ranLoader: live DGT SRUP RAN (municipio filter) first, then bundled snapshot.
@@ -145,28 +145,6 @@ func ranLoader(opts source.Options) source.Loader {
 		Meta:     model.Source{Name: "DGT/SNIT — SRUP, RAN", Layer: "ran"},
 	}, opts)
 	return source.Fallback(live, bundled)
-}
-
-// classifyOrdenamento interprets a CRUS/PDM zoning feature.
-func classifyOrdenamento(f spatial.Feature) adapter.Classification {
-	class := f.Prop("classe_2021", "classe", "classificacao")
-	sub := f.Prop("categoria_2021", "categoria")
-	full := f.Prop("classificacao_e_qualificacao")
-	code := f.Prop("codigo", "cod")
-	label := full
-	if label == "" {
-		switch {
-		case class != "" && sub != "":
-			label = class + " — " + sub
-		case sub != "":
-			label = sub
-		case class != "":
-			label = class
-		default:
-			label = "(não classificado)"
-		}
-	}
-	return adapter.Classification{Class: class, Subclass: sub, Label: label, RawCode: code}
 }
 
 func ranDetail(f spatial.Feature) string {

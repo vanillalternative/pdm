@@ -56,6 +56,7 @@ func run() error {
 		fn   func(string) error
 	}{
 		{"municipalities", buildMunicipalities},
+		{"freguesias", buildFreguesias},
 		{"zoning", buildZoning},
 		{"ran", buildRAN},
 		{"ren", buildREN},
@@ -78,9 +79,11 @@ func run() error {
 // ---- targets ----
 
 func buildMunicipalities(stamp string) error {
+	// All mainland municipalities. The DGT OGC API carries CAOP Continente only;
+	// the autonomous regions publish through their own regional services. Small
+	// pages: full-detail CAOP boundaries run ~0.5 MB per municipality.
 	u := ogcBase + "/municipios/items?" + url.Values{
-		"bbox":  {"-8.95,39.30,-8.00,39.95"},
-		"limit": {"200"},
+		"limit": {"20"},
 		"f":     {"json"},
 	}.Encode()
 	feats, err := fetchOGC(u)
@@ -95,7 +98,31 @@ func buildMunicipalities(stamp string) error {
 	return writeFC("data/municipalities.geojson", out, source{
 		Name: "DGT — CAOP (Carta Administrativa Oficial de Portugal), municípios",
 		URL:  ogcBase + "/municipios", Service: "OGC API Features",
-		RetrievedAt: stamp, Note: "Region subset; boundaries simplified (~30m) for municipality resolution.",
+		RetrievedAt: stamp, Note: "All mainland municipalities (CAOP Continente); boundaries simplified (~30m) for municipality resolution.",
+	})
+}
+
+func buildFreguesias(stamp string) error {
+	// All mainland freguesias (~3000 features). Simplified more aggressively
+	// than municipalities: freguesia resolution only labels a report, so ~50 m
+	// borders are plenty and keep the embedded file small.
+	u := ogcBase + "/freguesias/items?" + url.Values{
+		"limit": {"100"},
+		"f":     {"json"},
+	}.Encode()
+	feats, err := fetchOGC(u)
+	if err != nil {
+		return err
+	}
+	out := process(feats, opts{
+		keep:      []string{"freguesia", "dtmnfr"},
+		precision: 5,
+		simplify:  0.0005, // ~50 m
+	})
+	return writeFC("data/freguesias.geojson", out, source{
+		Name: "DGT — CAOP (Carta Administrativa Oficial de Portugal), freguesias",
+		URL:  ogcBase + "/freguesias", Service: "OGC API Features",
+		RetrievedAt: stamp, Note: "All mainland freguesias (CAOP Continente); boundaries simplified (~50m) for freguesia labelling.",
 	})
 }
 
@@ -475,7 +502,25 @@ func fetchArcGIS(layerURL string) ([]json.RawMessage, error) {
 	return all, nil
 }
 
+// get fetches a URL, retrying with backoff: the public geoservices are slow to
+// first byte when cold and intermittently answer 502 mid-pagination.
 func get(u string) ([]byte, error) {
+	var lastErr error
+	for attempt := 0; attempt < 5; attempt++ {
+		if attempt > 0 {
+			time.Sleep(time.Duration(5*attempt*attempt) * time.Second) // 5s,20s,45s,80s
+			fmt.Printf("    (retrying %d/4)\n", attempt)
+		}
+		body, err := getOnce(u)
+		if err == nil {
+			return body, nil
+		}
+		lastErr = err
+	}
+	return nil, lastErr
+}
+
+func getOnce(u string) ([]byte, error) {
 	req, err := http.NewRequest(http.MethodGet, u, nil)
 	if err != nil {
 		return nil, fmt.Errorf("bad URL %q: %w", u, err)

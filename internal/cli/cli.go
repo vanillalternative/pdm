@@ -635,8 +635,9 @@ func buildEngine(opts options) (*query.Engine, error) {
 	}
 	if truthAPI != "" {
 		u, err := url.Parse(truthAPI)
-		if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
-			return nil, fmt.Errorf("invalid truth-mirror URL %q (--truth-api flag or PDM_TRUTH_API env var): expected http(s)://host[/path]", truthAPI)
+		if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" ||
+			u.RawQuery != "" || u.Fragment != "" {
+			return nil, fmt.Errorf("invalid truth-mirror URL %q (--truth-api flag or PDM_TRUTH_API env var): expected http(s)://host[/path] with no query or fragment", truthAPI)
 		}
 		so.TruthAPI = strings.TrimRight(truthAPI, "/")
 	}

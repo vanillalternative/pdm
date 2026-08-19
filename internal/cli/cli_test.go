@@ -4,12 +4,24 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"os"
 	"strings"
 	"testing"
 
 	"github.com/bernardosimoes/pdm/internal/ai"
 	"github.com/bernardosimoes/pdm/internal/report"
 )
+
+// TestMain pins the environment so the suite is hermetic: buildEngine reads
+// these vars unconditionally, and a stale shell export (say, PDM_TRUTH_API
+// pointing at a dev mirror) must not change what the tests exercise. Tests
+// that need one of them set it explicitly via t.Setenv.
+func TestMain(m *testing.M) {
+	for _, v := range []string{"PDM_TRUTH_API", "PDM_FETCH_TIMEOUT_SECONDS", "PDM_FETCH_MAX_ATTEMPTS"} {
+		os.Unsetenv(v)
+	}
+	os.Exit(m.Run())
+}
 
 func TestIsFlagAcceptsNegativeNumbers(t *testing.T) {
 	cases := map[string]bool{
@@ -101,6 +113,18 @@ func TestBuildEngineTruthAPI(t *testing.T) {
 		_, err := buildEngine(base(t))
 		if err == nil || !strings.Contains(err.Error(), "PDM_TRUTH_API") {
 			t.Fatalf("expected an error naming PDM_TRUTH_API, got %v", err)
+		}
+	})
+	t.Run("query string rejected", func(t *testing.T) {
+		t.Setenv("PDM_TRUTH_API", "https://mirror.local/?ref=1")
+		if _, err := buildEngine(base(t)); err == nil {
+			t.Fatal("a base URL with a query string must be rejected")
+		}
+	})
+	t.Run("fragment rejected", func(t *testing.T) {
+		t.Setenv("PDM_TRUTH_API", "https://mirror.local/#frag")
+		if _, err := buildEngine(base(t)); err == nil {
+			t.Fatal("a base URL with a fragment must be rejected")
 		}
 	})
 	t.Run("invalid flag errors", func(t *testing.T) {

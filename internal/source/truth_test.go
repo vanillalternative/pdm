@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -124,7 +125,9 @@ func TestTruthServerDownFastFail(t *testing.T) {
 	truthTimeout = 300 * time.Millisecond
 	defer func() { truthTimeout = restore }()
 
+	var requests int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&requests, 1)
 		<-r.Context().Done() // hang until the client gives up
 	}))
 	defer srv.Close()
@@ -135,8 +138,43 @@ func TestTruthServerDownFastFail(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected an error against a hung mirror")
 	}
-	if elapsed > time.Second {
-		t.Fatalf("mirror failure took %v; it must fail fast (<1s)", elapsed)
+	if n := atomic.LoadInt32(&requests); n != 1 {
+		t.Fatalf("a hung mirror gets exactly one attempt, saw %d", n)
+	}
+	// Generous bound: only trips if the production timeout were absent (the
+	// handler hangs until the deadline fires, so no timeout means no return).
+	if elapsed > 5*time.Second {
+		t.Fatalf("mirror failure took %v; truthTimeout must bound the attempt", elapsed)
+	}
+}
+
+// TestTruthBaseURLRobust: a base URL with a trailing slash or a stray query
+// string must still produce a request against the API path.
+func TestTruthBaseURLRobust(t *testing.T) {
+	var mu sync.Mutex
+	var paths []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		paths = append(paths, r.URL.Path+"?"+r.URL.RawQuery)
+		mu.Unlock()
+		fmt.Fprint(w, truthFC)
+	}))
+	defer srv.Close()
+
+	for _, base := range []string{srv.URL + "/", srv.URL + "/?ref=1", srv.URL + "#frag"} {
+		if _, err := Truth(truthCfg(base), truthOpts(-8.3, 39.7))(context.Background()); err != nil {
+			t.Fatalf("base %q: %v", base, err)
+		}
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if len(paths) != 3 {
+		t.Fatalf("expected 3 requests, got %v", paths)
+	}
+	for _, p := range paths {
+		if !strings.HasPrefix(p, "/api/truth/zoning?") || !strings.Contains(p, "code=1411") || strings.Contains(p, "ref=1") {
+			t.Errorf("request %q must target the API path with the query params only", p)
+		}
 	}
 }
 

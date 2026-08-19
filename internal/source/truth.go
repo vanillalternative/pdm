@@ -73,11 +73,20 @@ func Truth(cfg TruthConfig, opts Options) Loader {
 		if !ok {
 			return Loaded{}, fmt.Errorf("subject point is empty: %w", ErrTruthMiss)
 		}
+		base, err := url.Parse(cfg.BaseURL)
+		if err != nil {
+			return Loaded{}, fmt.Errorf("truth mirror: base URL %q: %w", cfg.BaseURL, err)
+		}
+		u := base.JoinPath("api", "truth", "zoning")
 		q := url.Values{}
 		q.Set("code", cfg.Code)
 		q.Set("lat", strconv.FormatFloat(xy.Y, 'f', -1, 64))
 		q.Set("lon", strconv.FormatFloat(xy.X, 'f', -1, 64))
-		reqURL := cfg.BaseURL + "/api/truth/zoning?" + q.Encode()
+		// Any query/fragment on the configured base is discarded — the request
+		// must target the API path even if a sloppy base slipped past validation.
+		u.RawQuery = q.Encode()
+		u.Fragment = ""
+		reqURL := u.String()
 
 		attemptCtx, cancel := context.WithTimeout(ctx, truthTimeout)
 		defer cancel()

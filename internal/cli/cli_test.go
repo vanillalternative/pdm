@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -89,6 +90,107 @@ func TestRunSupported(t *testing.T) {
 	for _, want := range []string{"Tomar", "CRUS", "mainland"} {
 		if !strings.Contains(out.String(), want) {
 			t.Errorf("supported output missing %q:\n%s", want, out.String())
+		}
+	}
+}
+
+// TestRunMunicipalitiesContract guards the JSON shape web/server.js parses at
+// boot (it exits the process if this command fails or drifts). Field names
+// are a wire contract — never rename them.
+func TestRunMunicipalitiesContract(t *testing.T) {
+	var out, errb bytes.Buffer
+	code := Run([]string{"municipalities"}, &out, &errb)
+	if code != 0 {
+		t.Fatalf("exit %d, stderr=%q", code, errb.String())
+	}
+	var doc struct {
+		Count          int `json:"count"`
+		Municipalities []struct {
+			Name     string `json:"name"`
+			Code     string `json:"code"`
+			District string `json:"district"`
+			Centroid *struct {
+				Lat float64 `json:"lat"`
+				Lon float64 `json:"lon"`
+			} `json:"centroid"`
+			BBox        []float64 `json:"bbox"`
+			Regulamento *struct {
+				Reference string `json:"reference"`
+				URL       string `json:"url"`
+				Articles  int    `json:"articles"`
+				Status    string `json:"status"`
+			} `json:"regulamento"`
+			SpecialPlans []struct {
+				Name string `json:"name"`
+				Kind string `json:"kind"`
+			} `json:"special_plans"`
+		} `json:"municipalities"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &doc); err != nil {
+		t.Fatalf("municipalities output is not the expected JSON: %v", err)
+	}
+	if doc.Count < 270 || len(doc.Municipalities) != doc.Count {
+		t.Fatalf("count = %d, entries = %d", doc.Count, len(doc.Municipalities))
+	}
+	var tomar bool
+	for _, m := range doc.Municipalities {
+		if m.Name == "" || m.Code == "" || m.District == "" {
+			t.Fatalf("entry missing name/code/district: %+v", m)
+		}
+		if m.Centroid == nil || len(m.BBox) != 4 {
+			t.Fatalf("entry %s missing centroid/bbox", m.Name)
+		}
+		if m.Code == "1418" {
+			tomar = true
+			if m.Regulamento == nil || m.Regulamento.Articles == 0 || m.Regulamento.Reference == "" {
+				t.Errorf("Tomar must carry its parsed regulamento, got %+v", m.Regulamento)
+			}
+			if len(m.SpecialPlans) == 0 {
+				t.Errorf("Tomar must list its special plans (POACB), got none")
+			}
+		}
+	}
+	if !tomar {
+		t.Error("dtcc 1418 (Tomar) missing from the municipalities list")
+	}
+}
+
+// TestRunReportNDJSONEventOrder guards the streaming contract web/server.js
+// relays to the browser: the first event is meta, the terminal event is
+// result, and every line is a standalone JSON object. Fetch budgets are
+// pinned tiny so probe layers fail fast offline — failures surface as layer
+// events, never as a broken stream.
+func TestRunReportNDJSONEventOrder(t *testing.T) {
+	t.Setenv("PDM_FETCH_TIMEOUT_SECONDS", "2")
+	t.Setenv("PDM_FETCH_MAX_ATTEMPTS", "1")
+	var out, errb bytes.Buffer
+	code := Run([]string{"report", "39.60", "-8.41", "--format", "ndjson", "--no-cache"}, &out, &errb)
+	if code != 0 {
+		t.Fatalf("exit %d, stderr=%q", code, errb.String())
+	}
+	lines := strings.Split(strings.TrimSpace(out.String()), "\n")
+	if len(lines) < 3 {
+		t.Fatalf("expected at least meta+layer+result events, got %d lines", len(lines))
+	}
+	events := make([]string, len(lines))
+	for i, l := range lines {
+		var ev struct {
+			Event string `json:"event"`
+		}
+		if err := json.Unmarshal([]byte(l), &ev); err != nil {
+			t.Fatalf("line %d is not JSON: %v\n%s", i, err, l)
+		}
+		events[i] = ev.Event
+	}
+	if events[0] != "meta" {
+		t.Errorf("first event = %q, want meta", events[0])
+	}
+	if events[len(events)-1] != "result" {
+		t.Errorf("terminal event = %q, want result", events[len(events)-1])
+	}
+	for _, e := range events[1 : len(events)-1] {
+		if e == "meta" || e == "result" {
+			t.Errorf("unexpected mid-stream %q event in %v", e, events)
 		}
 	}
 }

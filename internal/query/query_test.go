@@ -118,6 +118,219 @@ func genericRoutes() []stubRoute {
 	}
 }
 
+// Ferreira do Zêzere (dtcc 1411) has no dedicated adapter, so it exercises the
+// generic CRUS path and the truth-mirror decoration. The test point is its
+// centroid; every canned polygon below covers it.
+const (
+	fzLon, fzLat = -8.31687, 39.72135
+	fzSquare     = `"geometry":{"type":"Polygon","coordinates":[[[-8.45,39.6],[-8.2,39.6],[-8.2,39.8],[-8.45,39.8],[-8.45,39.6]]]}`
+)
+
+// fzCRUS is a canned CRUS response covering the Ferreira do Zêzere point.
+const fzCRUS = `{"type":"FeatureCollection","features":[{"type":"Feature","properties":{
+"classe_2021":"Solo Rústico","categoria_2021":"Espaços Florestais",
+"classificacao_e_qualificacao":"Solo Rústico - Espaços Florestais",
+"dtcc":"1411","municipio":"FERREIRA DO ZÊZERE","codigo":31,"situacao_pdm":"Vigente"},` + fzSquare + `}]}`
+
+// fzTruthHit is a truth-mirror response whose recorded polygon covers the
+// point; fzTruthGap records only a polygon elsewhere (a coverage gap).
+const fzTruthHit = `{"type":"FeatureCollection","features":[{"type":"Feature","properties":{
+"class":"Solo rústico","subclass":"Espaços florestais","label":"Solo rústico — Espaços florestais (registado)",
+"raw_code":"F1","color":"#4f8a3d","layer_id":"ordenamento","muni_code":"1411","recorded_at":"2026-08-01T10:00:00Z"},` + fzSquare + `}],
+"pdms":{"count":1,"next_after":null,"recorded_from":["DGT/SNIT — CRUS (ordenamento do solo)"],"updated_at":"2026-08-02T12:30:00Z"}}`
+
+const fzTruthGap = `{"type":"FeatureCollection","features":[{"type":"Feature","properties":{
+"class":"Solo urbano","label":"Solo urbano"},
+"geometry":{"type":"Polygon","coordinates":[[[-8.1,39.6],[-8.0,39.6],[-8.0,39.7],[-8.1,39.7],[-8.1,39.6]]]}}],
+"pdms":{"count":1,"next_after":null,"recorded_from":[],"updated_at":"2026-08-02T12:30:00Z"}}`
+
+// fzRoutes stubs the national services for Ferreira do Zêzere: CRUS zoning
+// plus RAN/REN existence checks confirming data exists (probes answer empty).
+func fzRoutes(truthBody string) []stubRoute {
+	routes := []stubRoute{
+		{"collections/crus/items", fzCRUS},
+		{"srup_ran/items?f=json&limit=1&municipio=FERREIRA", `{"numberMatched":1,"features":[{"type":"Feature","properties":{"municipio":"FERREIRA DO ZÊZERE"}}]}`},
+		{"srup_ren_areal/items?dtcc=1411&f=json&limit=1", `{"numberMatched":1,"features":[{"type":"Feature","properties":{"dtcc":"1411"}}]}`},
+	}
+	if truthBody != "" {
+		routes = append([]stubRoute{{"/api/truth/zoning", truthBody}}, routes...)
+	}
+	return routes
+}
+
+// TestPointTruthMirrorHit: for a generic municipality with the mirror
+// configured, the recorded answer is served, the official CRUS source is never
+// contacted, and the result is honestly capped and annotated.
+func TestPointTruthMirrorHit(t *testing.T) {
+	var seen []string
+	eng := newEngineOpts(t, source.Options{
+		Live: false, HTTP: stubClient(t, &seen, fzRoutes(fzTruthHit)),
+		TruthAPI: "http://mirror.local",
+	})
+	res, err := eng.Point(context.Background(), fzLon, fzLat)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Municipality != "Ferreira do Zêzere" || !res.Supported {
+		t.Fatalf("expected supported Ferreira do Zêzere, got %q supported=%v", res.Municipality, res.Supported)
+	}
+	if len(res.Zoning) != 1 || res.Zoning[0].Label != "Solo rústico — Espaços florestais (registado)" {
+		t.Fatalf("expected the recorded zoning label, got %+v", res.Zoning)
+	}
+	if res.Zoning[0].RawCode != "F1" {
+		t.Errorf("expected the recorded raw_code, got %q", res.Zoning[0].RawCode)
+	}
+	var mirror *model.Source
+	for i := range res.Sources {
+		if res.Sources[i].Provenance == model.ProvenanceRecordedMirror {
+			mirror = &res.Sources[i]
+		}
+	}
+	if mirror == nil {
+		t.Fatalf("expected a recorded-mirror source, got %+v", res.Sources)
+	}
+	if !strings.Contains(mirror.Name, "orig.:") {
+		t.Errorf("mirror source should credit the original source, got %q", mirror.Name)
+	}
+	if !sawURLContaining(seen, "/api/truth/zoning", "code=1411") {
+		t.Errorf("expected a truth-mirror request, got %v", seen)
+	}
+	if sawURLContaining(seen, "collections/crus/items") {
+		t.Errorf("a mirror hit must not contact CRUS, got %v", seen)
+	}
+	if res.Confidence != model.ConfidenceMedium {
+		t.Errorf("mirror-served results are capped at medium, got %s", res.Confidence)
+	}
+	if !hasNoteContaining(res.Notes, "espelho local pdms") {
+		t.Errorf("expected the mirror note, got %v", res.Notes)
+	}
+}
+
+// TestPointTruthMirrorGapFallsBack: a recorded polygon that does not cover the
+// point is a miss — the official CRUS source answers, with no mirror trace.
+func TestPointTruthMirrorGapFallsBack(t *testing.T) {
+	var seen []string
+	eng := newEngineOpts(t, source.Options{
+		Live: false, HTTP: stubClient(t, &seen, fzRoutes(fzTruthGap)),
+		TruthAPI: "http://mirror.local",
+	})
+	res, err := eng.Point(context.Background(), fzLon, fzLat)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Zoning) != 1 || res.Zoning[0].Label != "Solo Rústico - Espaços Florestais" {
+		t.Fatalf("expected the CRUS zoning after a mirror gap, got %+v", res.Zoning)
+	}
+	if !sawURLContaining(seen, "/api/truth/zoning") || !sawURLContaining(seen, "collections/crus/items") {
+		t.Fatalf("expected mirror then CRUS requests, got %v", seen)
+	}
+	if len(res.Sources) == 0 || res.Sources[0].Provenance != model.ProvenanceOfficialLive {
+		t.Errorf("expected official-live zoning source, got %+v", res.Sources)
+	}
+	if hasNoteContaining(res.Notes, "unavailable") {
+		t.Errorf("a clean fallback must not report the layer unavailable, got %v", res.Notes)
+	}
+	if hasNoteContaining(res.Notes, "espelho local pdms") {
+		t.Errorf("a mirror miss must not carry the mirror note, got %v", res.Notes)
+	}
+}
+
+// TestPointTruthMirror500FallsBack: a broken mirror is invisible — the
+// official source answers as if the mirror did not exist.
+func TestPointTruthMirror500FallsBack(t *testing.T) {
+	var mu sync.Mutex
+	var seen []string
+	inner := stubClient(t, nil, fzRoutes(""))
+	client := &http.Client{Transport: rtFunc(func(r *http.Request) (*http.Response, error) {
+		u := r.URL.String()
+		mu.Lock()
+		seen = append(seen, u)
+		mu.Unlock()
+		if strings.Contains(u, "/api/truth/") {
+			return &http.Response{
+				StatusCode: http.StatusInternalServerError,
+				Body:       io.NopCloser(strings.NewReader("boom")),
+				Header:     http.Header{},
+			}, nil
+		}
+		return inner.Transport.RoundTrip(r)
+	})}
+	eng := newEngineOpts(t, source.Options{Live: false, HTTP: client, TruthAPI: "http://mirror.local"})
+	res, err := eng.Point(context.Background(), fzLon, fzLat)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Zoning) != 1 || res.Zoning[0].Label != "Solo Rústico - Espaços Florestais" {
+		t.Fatalf("expected the CRUS zoning after a mirror error, got %+v", res.Zoning)
+	}
+	if !sawURLContaining(seen, "/api/truth/zoning") || !sawURLContaining(seen, "collections/crus/items") {
+		t.Fatalf("expected mirror then CRUS requests, got %v", seen)
+	}
+}
+
+// TestPointTruthMirrorLiveBypasses: --live means fresh official data — the
+// mirror must not be consulted at all.
+func TestPointTruthMirrorLiveBypasses(t *testing.T) {
+	var seen []string
+	eng := newEngineOpts(t, source.Options{
+		Live: true, HTTP: stubClient(t, &seen, fzRoutes(fzTruthHit)),
+		TruthAPI: "http://mirror.local",
+	})
+	res, err := eng.Point(context.Background(), fzLon, fzLat)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sawURLContaining(seen, "/api/truth/") {
+		t.Errorf("--live must bypass the mirror, got %v", seen)
+	}
+	if len(res.Zoning) != 1 || res.Zoning[0].Label != "Solo Rústico - Espaços Florestais" {
+		t.Fatalf("expected the CRUS zoning under --live, got %+v", res.Zoning)
+	}
+}
+
+// TestPolygonTruthMirrorBypassed: the mirror never serves parcel queries (the
+// store cannot prove full parcel coverage).
+func TestPolygonTruthMirrorBypassed(t *testing.T) {
+	var seen []string
+	eng := newEngineOpts(t, source.Options{
+		Live: false, HTTP: stubClient(t, &seen, fzRoutes(fzTruthHit)),
+		TruthAPI: "http://mirror.local",
+	})
+	res, err := eng.Polygon(context.Background(), squareAround(t, fzLon, fzLat, 0.001))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sawURLContaining(seen, "/api/truth/") {
+		t.Errorf("polygon queries must never consult the mirror, got %v", seen)
+	}
+	if !sawURLContaining(seen, "collections/crus/items") {
+		t.Errorf("expected the CRUS request, got %v", seen)
+	}
+	if len(res.Zoning) != 1 || res.Zoning[0].Label != "Solo Rústico - Espaços Florestais" {
+		t.Fatalf("unexpected zoning: %+v", res.Zoning)
+	}
+}
+
+// TestPointDedicatedAdapterSkipsMirror: municipalities with a dedicated
+// adapter (richer local sources) never consult the mirror.
+func TestPointDedicatedAdapterSkipsMirror(t *testing.T) {
+	var seen []string
+	eng := newEngineOpts(t, source.Options{
+		Live: false, HTTP: stubClient(t, &seen, genericRoutes()),
+		TruthAPI: "http://mirror.local",
+	})
+	res, err := eng.Point(context.Background(), -8.60, 39.68) // Ourém
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Municipality != "Ourém" {
+		t.Fatalf("expected Ourém, got %q", res.Municipality)
+	}
+	if sawURLContaining(seen, "/api/truth/") {
+		t.Errorf("a dedicated adapter must never consult the mirror, got %v", seen)
+	}
+}
+
 func TestPointTomarCentre(t *testing.T) {
 	res, err := newEngine(t).Point(shortCtx(t), -8.41, 39.60)
 	if err != nil {

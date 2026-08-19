@@ -92,6 +92,7 @@ func (e *Engine) PointStream(ctx context.Context, lon, lat float64, emit Emit) (
 	opts.BBox = &bb
 
 	pt := spatial.Point(lon, lat)
+	opts.Subject = pt
 	collector := newSourceSet()
 	confidence := ad.BaseConfidence()
 	zoneSeen := map[string]bool{}
@@ -167,6 +168,10 @@ func (e *Engine) PointStream(ctx context.Context, lon, lat float64, emit Emit) (
 	res.Instruments = enrichInstruments(planos.ForMunicipality(muni.Name), res.Constraints)
 	res.Regulation = attachRegulation(ad, muni.Code, res.Zoning)
 	res.Sources = collector.list()
+	if capped, mirrored := capForMirror(res.Sources, confidence); mirrored {
+		confidence = capped
+		res.Notes = append(res.Notes, mirrorNote)
+	}
 	res.Confidence = confidence
 	return res, nil
 }
@@ -223,6 +228,9 @@ func (e *Engine) PolygonStream(ctx context.Context, g geom.Geometry, emit Emit) 
 	opts := e.opts
 	bb := geomBBox(g, 0.005)
 	opts.BBox = &bb
+	// The mirror never serves polygon queries: the store cannot prove full
+	// parcel coverage, so every parcel goes to the official sources.
+	opts.TruthAPI = ""
 
 	collector := newSourceSet()
 	confidence := ad.BaseConfidence()
@@ -279,6 +287,10 @@ func (e *Engine) PolygonStream(ctx context.Context, g geom.Geometry, emit Emit) 
 	res.Instruments = enrichInstruments(planos.ForMunicipality(best.Municipality.Name), res.Constraints)
 	res.Regulation = attachRegulation(ad, best.Municipality.Code, res.Zoning)
 	res.Sources = collector.list()
+	if capped, mirrored := capForMirror(res.Sources, confidence); mirrored {
+		confidence = capped
+		res.Notes = append(res.Notes, mirrorNote)
+	}
 	res.Confidence = confidence
 	return res, nil
 }
@@ -521,6 +533,15 @@ func zoningColor(c adapter.Classification) string {
 // RAN/REN) are skipped — the dedicated source is richer.
 func composeLayers(ad adapter.Adapter, name, code string, opts source.Options) []adapter.Layer {
 	layers := geometryLayers(ad, opts)
+	// Generic (CRUS-served) zoning may be answered by the pdms truth mirror
+	// first; dedicated adapters have richer local sources and are never
+	// decorated. Only Loader/Classify change — ID/Kind/Constraint stay intact
+	// so the dedup below is unaffected.
+	if registry.IsGeneric(ad) {
+		for i := range layers {
+			layers[i] = truthLayer(layers[i], name, code, opts)
+		}
+	}
 	skip := map[string]bool{}
 	for _, l := range layers {
 		if l.Constraint != "" {

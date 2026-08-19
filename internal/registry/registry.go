@@ -63,6 +63,13 @@ func Resolve(name, code string) (a adapter.Adapter, dedicated bool) {
 	return generic.New(name, code), false
 }
 
+// IsGeneric reports whether an adapter is the generic CRUS-backed fallback
+// rather than a dedicated municipal adapter.
+func IsGeneric(ad adapter.Adapter) bool {
+	_, ok := ad.(*generic.Adapter)
+	return ok
+}
+
 // Supported returns the sorted list of municipalities with a dedicated (full
 // support) adapter.
 func Supported() []string {

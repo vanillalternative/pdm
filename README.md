@@ -30,22 +30,25 @@ Câmara (RJUE) — automated data gets you most of the way, never the certificat
 
 ## Status
 
-**All mainland municipalities are supported for zoning.** Any coordinate/parcel
-in continental Portugal resolves to its municipality (bundled CAOP boundaries)
-and gets its zoning from the national **DGT CRUS** dataset — the harmonised
-carta of every municipality's plans in force — fetched live (bbox-filtered) and
-cached.
+**All mainland municipalities are supported for zoning and the national
+constraints.** Any coordinate/parcel in continental Portugal resolves to its
+municipality and freguesia (bundled CAOP boundaries), gets its zoning from the
+national **DGT CRUS** dataset — the harmonised carta of every municipality's
+plans in force — and is checked against the national **DGT SRUP** servidões:
+**Rede Natura 2000** (ZPE and ZEC) and the **rural fire hazard** chart
+(perigosidade de incêndio rural, high classes only, which are the ones that
+restrict building). All fetched live (bbox-filtered) and cached.
 
 Two support levels:
 
-- **Full** (dedicated adapter): zoning **+ constraint layers + Regulamento
-  articles**. Pilot: **Tomar** (concelho 1418).
-- **Zoning-only** (generic adapter): every other mainland municipality. The
-  constraint layers (RAN, REN, servidões — e.g. Tomar's Albufeira de Castelo de
-  Bode/POACB) and the written regulation are municipality-specific work and are
-  added one municipality at a time; until then results carry an explicit note
-  and are capped at **low confidence** — the absence of constraints in the
-  output does not mean they don't exist.
+- **Full** (dedicated adapter): the above **+ municipal constraint layers +
+  Regulamento articles**. Pilot: **Tomar** (concelho 1418).
+- **National-data-only** (generic adapter): every other mainland municipality.
+  The municipal constraint layers (RAN, REN, servidões locais — e.g. Tomar's
+  Albufeira de Castelo de Bode/POACB) and the written regulation are
+  municipality-specific work and are added one municipality at a time; until
+  then results carry an explicit note and are capped at **low confidence** —
+  the absence of a constraint in the output does not mean it doesn't exist.
 
 The Azores and Madeira are not yet covered: the mainland DGT datasets
 (CAOP/CRUS) exclude them, and the regional services are not yet integrated
@@ -177,6 +180,57 @@ with an AI-generation disclaimer on top of the standard one. Data gaps (e.g.
 constraints not evaluated for a municipality) are computed deterministically
 and rendered whether or not the model acknowledges them.
 
+## Output format (JSON)
+
+The JSON output (`--format json`) is the app's stable contract — the structured
+**evidence pack** a downstream AI or program consumes. The canonical definition
+is [`internal/model/model.go`](internal/model/model.go); this section is the
+human-readable map of it. A `point` query returns one `PointResult`; a `polygon`
+query returns one `PolygonResult` (same fields, minus the single input coordinate,
+plus `analysed_area_m2` and per-hit `area_m2`/`percent`).
+
+Top-level object (`PointResult`):
+
+| field | type | meaning |
+|---|---|---|
+| `input` | `{lat, lon}` | the queried coordinate (WGS84 decimal degrees) |
+| `municipality` | string | resolved concelho (CAOP) |
+| `freguesia` | string | resolved freguesia (CAOP), if known |
+| `supported` | bool | `true` if a municipality/plan was resolved and queried |
+| `plan` | `PlanInfo` | the planning instrument in force (see below), if any |
+| `zoning` | `[]ZoningHit` | zoning/land-use classes at the location |
+| `constraints` | `[]ConstraintHit` | constraints checked, each with `present: true/false` |
+| `regulation` | `Regulation` | applicable *Regulamento* articles (verbatim text), if retrieved |
+| `sources` | `[]Source` | attribution + provenance for every layer used |
+| `confidence` | enum | `high` \| `medium` \| `low` |
+| `notes` | `[]string` | caveats (e.g. constraints not evaluated for this municipality) |
+| `disclaimer` | string | the fixed legal disclaimer — always surface it |
+| `generated_at` | RFC 3339 | when the result was produced |
+
+Nested objects:
+
+- **`plan`** (`PlanInfo`): `name`, `kind` (e.g. `PDM`), `municipality`,
+  `published_ref` / `published_date` (Diário da República), and `documents[]`
+  (`{title, url, note}`) linking the official plan/regulation.
+- **`zoning[]`** (`ZoningHit`): `class` (e.g. `Solo Urbano`), `subclass`,
+  `label` (combined human label), `raw_code` (raw source value), `layer`.
+  For polygons: `area_m2`, `percent` of the parcel.
+- **`constraints[]`** (`ConstraintHit`): `type` (`REN`, `RAN`, …), `label`,
+  `present` (**the key field** — `false` means checked-and-absent, not
+  unknown), `detail`, `layer`. For polygons: `area_m2`, `percent`.
+- **`regulation`** (`Regulation`): `reference`, `url`, `note`, and `articles[]`
+  (`{number, title, section, text}`) — the **verbatim** article bodies. These
+  are *candidate* rules retrieved by matching the zoning category to regulation
+  sections; the tool never interprets them.
+- **`sources[]`** (`Source`): `name`, `layer`, `url`, `retrieved_at`, and
+  `provenance` — one of `official-live`, `official-cache`, `bundled-snapshot`,
+  or `sample` (illustrative only; downgrades confidence).
+
+Two rules a consumer must respect: a constraint absent from `constraints[]`
+is **not** the same as `present: false` (it means *not evaluated* — read
+`notes` and `confidence`), and the `regulation.articles[].text` is raw source
+material to reason over, never a computed building envelope.
+
 ## Data sources
 
 All data is official and public. `pdm` prefers **vector** services (queryable
@@ -185,7 +239,10 @@ GeoJSON) over WMS/raster/PDF.
 | Layer | Source | Service |
 |---|---|---|
 | Municipality boundaries (all mainland) | DGT **CAOP** (`municipios`) | OGC API Features |
+| Freguesia boundaries (all mainland) | DGT **CAOP** (`freguesias`) | OGC API Features |
 | Zoning, any mainland municipality (classificação e qualificação do solo) | DGT **CRUS** | OGC API Features |
+| Rede Natura 2000 — ZPE + ZEC (national) | DGT/SNIT **SRUP** (`srup_zpe`, `srup_zec`) | OGC API Features |
+| Perigosidade de incêndio rural, classes alta/muito alta (national) | DGT/SNIT **SRUP** (`srup_perigosidade_inc_rural`) | OGC API Features |
 | RAN (Reserva Agrícola Nacional) — Tomar | DGT/SNIT **SRUP** | OGC API Features |
 | REN (Reserva Ecológica Nacional) — Tomar | Município de Tomar / Médio Tejo (**MuniSIG**) | ArcGIS REST (GeoJSON) |
 | Albufeira de Castelo de Bode (POACB area) — Tomar | Município de Tomar (**MuniSIG**), Zonas de Proteção e Salvaguarda | ArcGIS REST (GeoJSON) |

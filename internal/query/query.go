@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"math"
 	"sort"
+	"sync"
 	"time"
 
 	"github.com/bernardosimoes/pdm/internal/adapter"
@@ -38,6 +39,31 @@ func New(resolver *admin.Resolver, opts source.Options) *Engine {
 // with the freguesia name.
 func (e *Engine) SetFreguesias(r *admin.FreguesiaResolver) {
 	e.freguesias = r
+}
+
+// loadedLayer pairs a layer with its (attempted) load result.
+type loadedLayer struct {
+	layer  adapter.Layer
+	loaded source.Loaded
+	err    error
+}
+
+// prefetch loads every layer concurrently (live layers each pay their own
+// network latency, so sequential loading multiplies it), preserving the
+// adapter's layer order for deterministic results.
+func prefetch(ctx context.Context, layers []adapter.Layer) []loadedLayer {
+	out := make([]loadedLayer, len(layers))
+	var wg sync.WaitGroup
+	for i, l := range layers {
+		wg.Add(1)
+		go func(i int, l adapter.Layer) {
+			defer wg.Done()
+			loaded, err := l.Loader(ctx)
+			out[i] = loadedLayer{layer: l, loaded: loaded, err: err}
+		}(i, l)
+	}
+	wg.Wait()
+	return out
 }
 
 // Point answers a coordinate query.
@@ -80,10 +106,10 @@ func (e *Engine) Point(ctx context.Context, lon, lat float64) (*model.PointResul
 	confidence := ad.BaseConfidence()
 	zoneSeen := map[string]bool{}
 
-	for _, layer := range ad.Layers(opts) {
-		loaded, err := layer.Loader(ctx)
-		if err != nil {
-			res.Notes = append(res.Notes, fmt.Sprintf("Layer %q unavailable: %v", layer.Title, err))
+	for _, ll := range prefetch(ctx, ad.Layers(opts)) {
+		layer, loaded := ll.layer, ll.loaded
+		if ll.err != nil {
+			res.Notes = append(res.Notes, fmt.Sprintf("Layer %q unavailable: %v", layer.Title, ll.err))
 			confidence = downgrade(confidence)
 			continue
 		}
@@ -188,10 +214,10 @@ func (e *Engine) Polygon(ctx context.Context, g geom.Geometry) (*model.PolygonRe
 	collector := newSourceSet()
 	confidence := ad.BaseConfidence()
 
-	for _, layer := range ad.Layers(opts) {
-		loaded, err := layer.Loader(ctx)
-		if err != nil {
-			res.Notes = append(res.Notes, fmt.Sprintf("Layer %q unavailable: %v", layer.Title, err))
+	for _, ll := range prefetch(ctx, ad.Layers(opts)) {
+		layer, loaded := ll.layer, ll.loaded
+		if ll.err != nil {
+			res.Notes = append(res.Notes, fmt.Sprintf("Layer %q unavailable: %v", layer.Title, ll.err))
 			confidence = downgrade(confidence)
 			continue
 		}
@@ -247,9 +273,9 @@ func (e *Engine) PointMap(ctx context.Context, lon, lat float64) *mapview.Data {
 	opts.BBox = &bb
 	pt := spatial.Point(lon, lat)
 
-	for _, layer := range ad.Layers(opts) {
-		loaded, err := layer.Loader(ctx)
-		if err != nil {
+	for _, ll := range prefetch(ctx, ad.Layers(opts)) {
+		layer, loaded := ll.layer, ll.loaded
+		if ll.err != nil {
 			continue
 		}
 		switch layer.Kind {
@@ -314,9 +340,9 @@ func (e *Engine) PolygonMap(ctx context.Context, g geom.Geometry) *mapview.Data 
 	opts := e.opts
 	bb := view.bbox()
 	opts.BBox = &bb
-	for _, layer := range ad.Layers(opts) {
-		loaded, err := layer.Loader(ctx)
-		if err != nil {
+	for _, ll := range prefetch(ctx, ad.Layers(opts)) {
+		layer, loaded := ll.layer, ll.loaded
+		if ll.err != nil {
 			continue
 		}
 		var near []spatial.Feature
@@ -521,9 +547,10 @@ func geomBBox(g geom.Geometry, pad float64) source.BBox {
 // what a per-municipality adapter adds.
 func zoningOnlyNote(muni string) string {
 	return fmt.Sprintf(
-		"Only zoning was checked for %s (from the national DGT CRUS dataset, fetched live and cached). "+
-			"Constraint layers (RAN, REN, servidões e restrições) and the written regulation (Regulamento) "+
-			"are not yet integrated for this municipality — do not read the absence of constraints as their inexistence.",
+		"Zoning for %s comes from the national DGT CRUS dataset, and the national servidões "+
+			"(Rede Natura 2000, perigosidade de incêndio rural) from the DGT SRUP datasets (fetched live and cached). "+
+			"Municipal constraint layers (RAN, REN, servidões locais) and the written regulation (Regulamento) "+
+			"are not yet integrated for this municipality — do not read the absence of a constraint as its inexistence.",
 		muni)
 }
 

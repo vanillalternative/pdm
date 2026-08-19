@@ -65,8 +65,23 @@ func (d *Data) SVG() string {
 		return x, y
 	}
 
+	// The geographic bbox as an SVG rectangle (top-left = MaxLat/MinLon).
+	boxX := offX
+	boxY := svgH - offY - spanY*scale
+	boxW := spanX * scale
+	boxH := spanY * scale
+
 	var b strings.Builder
-	fmt.Fprintf(&b, `<figure class="pdm-map"><svg viewBox="0 0 %.0f %.0f" role="img" aria-label="Planning map for the query location">`, svgW, svgH)
+	b.WriteString(`<figure class="pdm-map">`)
+	b.WriteString(mapToggle())
+	fmt.Fprintf(&b, `<svg viewBox="0 0 %.0f %.0f" role="img" aria-label="Planning map for the query location">`, svgW, svgH)
+
+	// Satellite basemap (behind everything): a single georeferenced ESRI World
+	// Imagery export for the same bbox, stretched into the projected box. Hidden
+	// by default via CSS — shown only when the reader flips the Satellite toggle.
+	fmt.Fprintf(&b,
+		`<image class="sat-img" x="%.1f" y="%.1f" width="%.1f" height="%.1f" preserveAspectRatio="none" href="%s"/>`,
+		boxX, boxY, boxW, boxH, esriImageURL(d.MinLon, d.MinLat, d.MaxLon, d.MaxLat, boxW, boxH))
 
 	// draw order: boundary, zoning, absent constraints, present constraints, subject
 	for _, want := range []Role{RoleBoundary, RoleZoning, RoleAbsent, RolePresent} {
@@ -100,6 +115,34 @@ func (d *Data) SVG() string {
 	b.WriteString(legend(d.Layers, d.SubjectKind))
 	b.WriteString(`</figure>`)
 	return b.String()
+}
+
+// mapToggle is the pure-CSS Map/Satellite switch overlaid on the map. A single
+// checkbox drives it; the page's CSS reveals the satellite image and dims the
+// vector fills while it is checked.
+func mapToggle() string {
+	return `<div class="map-toggle"><input type="checkbox" id="pdm-sat" class="sat-toggle" aria-label="Show satellite imagery">` +
+		`<label for="pdm-sat"><span class="seg seg-map">Map</span><span class="seg seg-sat">Satellite</span></label></div>`
+}
+
+// esriImageURL builds a single-image ESRI World Imagery export for the bbox,
+// requested in Web Mercator so it aligns (locally) with the equirectangular
+// projection used above. The pixel size keeps the Mercator aspect so the service
+// does not expand the bbox; preserveAspectRatio="none" stretches it into the box.
+func esriImageURL(minLon, minLat, maxLon, maxLat, boxW, boxH float64) string {
+	mercX := func(lon float64) float64 { return lon * 20037508.342789244 / 180 }
+	mercY := func(lat float64) float64 {
+		return math.Log(math.Tan((90+lat)*math.Pi/360)) / (math.Pi / 180) * 20037508.342789244 / 180
+	}
+	xmin, ymin, xmax, ymax := mercX(minLon), mercY(minLat), mercX(maxLon), mercY(maxLat)
+	w := math.Round(boxW)
+	h := w * (ymax - ymin) / (xmax - xmin) // match Mercator aspect
+	if h < 1 || math.IsNaN(h) {
+		h = math.Round(boxH)
+	}
+	return fmt.Sprintf(
+		"https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/export?bbox=%.3f,%.3f,%.3f,%.3f&bboxSR=3857&imageSR=3857&size=%.0f,%.0f&format=jpg&transparent=false&f=image",
+		xmin, ymin, xmax, ymax, w, math.Round(h))
 }
 
 func scaleBar(kx, scale float64) string {

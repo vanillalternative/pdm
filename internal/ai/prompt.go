@@ -58,17 +58,40 @@ func buildPayload(kind string, result any, constraints []model.ConstraintHit, re
 
 // dataGaps enumerates what this analysis does NOT know, deterministically.
 // The list is sent to the model (which must acknowledge the gaps) and is also
-// rendered in the report independently of the model complying.
+// rendered in the report independently of the model complying. An evaluated
+// constraint that is absent is NOT a gap — only a constraint type that was
+// never checked is.
 func dataGaps(constraints []model.ConstraintHit, reg *model.Regulation) []string {
+	evaluated := make(map[string]bool, len(constraints))
+	for _, c := range constraints {
+		evaluated[c.Type] = true
+	}
 	var gaps []string
-	if len(constraints) == 0 {
-		gaps = append(gaps, "Condicionantes legais (RAN, REN, servidões administrativas) não avaliadas para este município — a análise baseia-se apenas na classificação de uso do solo (CRUS).")
+	switch {
+	case len(constraints) == 0:
+		gaps = append(gaps, "Condicionantes legais (RAN, REN, Rede Natura 2000, perigosidade de incêndio, servidões administrativas) não avaliadas — a análise baseia-se apenas na classificação de uso do solo (CRUS).")
+	default:
+		if !evaluated["RAN"] || !evaluated["REN"] {
+			gaps = append(gaps, "Condicionantes municipais (RAN, REN, servidões locais do PDM) não avaliadas para este município — apenas as condicionantes de âmbito nacional foram verificadas.")
+		}
+		if !hasTypePrefix(evaluated, "Natura 2000") || !hasTypePrefix(evaluated, "Perigosidade") {
+			gaps = append(gaps, "Condicionantes nacionais (Rede Natura 2000, perigosidade de incêndio rural) não verificadas nesta análise.")
+		}
 	}
 	if reg == nil || len(reg.Articles) == 0 {
 		gaps = append(gaps, "Regulamento do plano municipal não disponível nesta análise — os parâmetros urbanísticos concretos (índices, cérceas, usos admitidos) não foram verificados.")
 	}
 	gaps = append(gaps, "Sem dados sobre acessos e infraestruturas, morfologia e topografia do terreno, cadastro predial ou imagem de satélite.")
 	return gaps
+}
+
+func hasTypePrefix(evaluated map[string]bool, prefix string) bool {
+	for t := range evaluated {
+		if len(t) >= len(prefix) && t[:len(prefix)] == prefix {
+			return true
+		}
+	}
+	return false
 }
 
 // systemPrompt defines the analyst role and the grounding rules. Instructions

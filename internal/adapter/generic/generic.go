@@ -1,16 +1,19 @@
 // Package generic is the fallback adapter serving any mainland municipality
 // without a dedicated one. It answers zoning from the national DGT CRUS
-// dataset (the harmonised carta of every municipality's plans in force) —
-// nothing municipality-specific is hardcoded. Because CRUS is far too large to
-// bundle nationally, this adapter always fetches live (cached); and because it
-// carries no constraint layers (RAN, REN, servidões) and no parsed regulation,
-// results are capped at low confidence and clearly annotated. Dedicated
-// adapters (like Tomar's) add those layers one municipality at a time.
+// dataset (the harmonised carta of every municipality's plans in force) and
+// the national SRUP constraints (Rede Natura 2000, rural fire hazard) —
+// nothing municipality-specific is hardcoded. Because those datasets are far
+// too large to bundle nationally, this adapter always fetches live (cached);
+// and because the municipal constraint layers (RAN, REN, servidões locais) and
+// the parsed regulation are still missing, results are capped at low
+// confidence and clearly annotated. Dedicated adapters (like Tomar's) add
+// those layers one municipality at a time.
 package generic
 
 import (
 	"github.com/bernardosimoes/pdm/internal/adapter"
 	"github.com/bernardosimoes/pdm/internal/adapter/crus"
+	"github.com/bernardosimoes/pdm/internal/adapter/srup"
 	"github.com/bernardosimoes/pdm/internal/model"
 	"github.com/bernardosimoes/pdm/internal/reg"
 	"github.com/bernardosimoes/pdm/internal/source"
@@ -33,8 +36,9 @@ func (a *Adapter) Municipality() string { return a.name }
 func (a *Adapter) Regulation() *reg.Store { return nil }
 
 func (a *Adapter) BaseConfidence() model.Confidence {
-	// The zoning itself is authoritative (DGT CRUS), but the answer is partial:
-	// no constraint layer is checked and no regulation is retrieved, so the
+	// The zoning (DGT CRUS) and national servidões (SRUP) are authoritative,
+	// but the answer is still partial: the municipal constraint layers (RAN,
+	// REN, servidões locais) and the regulation are not checked, so the
 	// overall result is capped at low.
 	return model.ConfidenceLow
 }
@@ -67,7 +71,7 @@ func (a *Adapter) Layers(opts source.Options) []adapter.Layer {
 	// There is no bundled snapshot for this municipality, so live fetching
 	// (bbox-limited, cached) is the only way to answer — regardless of --live.
 	opts.Live = true
-	return []adapter.Layer{
+	layers := []adapter.Layer{
 		{
 			ID:       "ordenamento",
 			Title:    "Ordenamento — classificação e qualificação do solo (CRUS/PDM)",
@@ -76,4 +80,5 @@ func (a *Adapter) Layers(opts source.Options) []adapter.Layer {
 			Classify: crus.Classify,
 		},
 	}
+	return append(layers, srup.Layers(opts)...)
 }

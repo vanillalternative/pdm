@@ -137,10 +137,11 @@ func runSupported(stdout, stderr io.Writer) int {
 	for _, m := range registry.Supported() {
 		fmt.Fprintf(stdout, "  - %s\n", m)
 	}
-	fmt.Fprintf(stdout, "\nEvery other mainland municipality (%d total in CAOP) is supported for zoning:\n", count)
-	fmt.Fprintf(stdout, "  the national DGT CRUS dataset is queried live (and cached locally).\n")
-	fmt.Fprintf(stdout, "  Constraint layers (RAN, REN, servidões) and the Regulamento are added\n")
-	fmt.Fprintf(stdout, "  per municipality.\n")
+	fmt.Fprintf(stdout, "\nEvery other mainland municipality (%d total in CAOP) is supported for zoning\n", count)
+	fmt.Fprintf(stdout, "  and the national constraints: the DGT CRUS dataset (zoning) and the DGT SRUP\n")
+	fmt.Fprintf(stdout, "  datasets (Rede Natura 2000 ZPE/ZEC, perigosidade de incêndio rural) are\n")
+	fmt.Fprintf(stdout, "  queried live (and cached locally). Municipal constraint layers (RAN, REN,\n")
+	fmt.Fprintf(stdout, "  servidões locais) and the Regulamento are added per municipality.\n")
 	fmt.Fprintf(stdout, "\nAzores and Madeira are not yet covered (regional services pending).\n")
 	return 0
 }

@@ -235,11 +235,13 @@ const css = `
  --bg:#f2efe8;--panel:#faf8f3;--ink:#20303a;--muted:#6a7780;--hair:#ddd5c7;--accent:#2a7f9e;
  --good:#2f7d5b;--good-bg:#e4f1ea;--warn:#b4562a;--warn-bg:#f6e7dd;
  --c-boundary:#5a6a74;--c-zoning:#8a6fb0;--c-ran:#4e8a4a;--c-ren:#3f7fbf;--c-poacb:#2a8fa8;--c-subject:#d8442a;
+ --c-natura:#6d8f2f;--c-incendio:#c2652a;
 }
 @media (prefers-color-scheme:dark){:root{
  --bg:#0d1418;--panel:#131e24;--ink:#e2e9ed;--muted:#93a4ac;--hair:#26343c;--accent:#3fa8c9;
  --good:#57c491;--good-bg:#123024;--warn:#e6905e;--warn-bg:#33201400;--warn-bg:#331f14;
  --c-boundary:#8ea0ab;--c-zoning:#b498dd;--c-ran:#6fc06a;--c-ren:#6aa8e6;--c-poacb:#45bcd6;--c-subject:#ff6a4d;
+ --c-natura:#9dc356;--c-incendio:#e8915a;
 }}
 :root[data-theme="light"]{--bg:#f2efe8;--panel:#faf8f3;--ink:#20303a;--muted:#6a7780;--hair:#ddd5c7;--good-bg:#e4f1ea;--warn-bg:#f6e7dd;--c-subject:#d8442a}
 :root[data-theme="dark"]{--bg:#0d1418;--panel:#131e24;--ink:#e2e9ed;--muted:#93a4ac;--hair:#26343c;--good-bg:#123024;--warn-bg:#331f14;--c-subject:#ff6a4d}
@@ -260,14 +262,33 @@ section{margin:26px 0}
  padding:.25em .6em;border-radius:999px;border:1px solid var(--hair);color:var(--muted)}
 .conf-high{color:var(--good)}.conf-medium{color:var(--accent)}
 /* map */
-.pdm-map{margin:0 0 8px;background:var(--panel);border:1px solid var(--hair);border-radius:14px;padding:12px;overflow:hidden}
+.pdm-map{position:relative;margin:0 0 8px;background:var(--panel);border:1px solid var(--hair);border-radius:14px;padding:12px;overflow:hidden}
 .pdm-map svg{display:block;width:100%;height:auto}
+/* satellite basemap + Map/Satellite toggle */
+.sat-img{display:none}
+.pdm-map:has(.sat-toggle:checked) .sat-img{display:block}
+.pdm-map:has(.sat-toggle:checked) .ly{fill-opacity:.14}
+.pdm-map:has(.sat-toggle:checked) .ly[data-role="present"]{fill-opacity:.24}
+.pdm-map:has(.sat-toggle:checked) .ly{stroke-width:2}
+.pdm-map:has(.sat-toggle:checked) .map-scale line{stroke:#fff}
+.pdm-map:has(.sat-toggle:checked) .map-scale text,.pdm-map:has(.sat-toggle:checked) .map-n,.pdm-map:has(.sat-toggle:checked) .map-narrow{fill:#fff}
+.map-toggle{position:absolute;top:18px;left:18px;z-index:2}
+.map-toggle .sat-toggle{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
+.map-toggle label{display:inline-flex;cursor:pointer;border:1px solid var(--hair);border-radius:8px;overflow:hidden;
+ background:var(--panel);box-shadow:0 1px 3px rgba(0,0,0,.14);font:600 11px ui-monospace,Menlo,monospace}
+.map-toggle .seg{padding:.4em .7em;color:var(--muted);user-select:none}
+.map-toggle .seg-sat{border-left:1px solid var(--hair)}
+.pdm-map:not(:has(.sat-toggle:checked)) .seg-map{background:var(--accent);color:#fff}
+.pdm-map:has(.sat-toggle:checked) .seg-sat{background:var(--accent);color:#fff}
+.map-toggle .sat-toggle:focus-visible+label{outline:2px solid var(--accent);outline-offset:2px}
 .ly{stroke-width:1.3;stroke-linejoin:round;vector-effect:non-scaling-stroke;fill-opacity:.32}
 .ly-boundary{fill:none;stroke:var(--c-boundary);stroke-width:1.7}
 .ly-zoning{fill:var(--c-zoning);stroke:var(--c-zoning);fill-opacity:.22}
 .ly-ran{fill:var(--c-ran);stroke:var(--c-ran)}
 .ly-ren{fill:var(--c-ren);stroke:var(--c-ren)}
 .ly-poacb{fill:var(--c-poacb);stroke:var(--c-poacb)}
+.ly-zpe,.ly-zec{fill:var(--c-natura);stroke:var(--c-natura)}
+.ly-incendio{fill:var(--c-incendio);stroke:var(--c-incendio)}
 .ly[data-role="absent"]{fill-opacity:.12;stroke-dasharray:4 3}
 .ly[data-role="present"]{fill-opacity:.42}
 .subject-poly{fill:none;stroke:var(--c-subject);stroke-width:2.4;stroke-dasharray:6 3}
@@ -284,6 +305,7 @@ section{margin:26px 0}
 .key.ly-boundary{background:transparent;border-color:var(--c-boundary)}
 .key.ly-zoning{background:var(--c-zoning);opacity:.5}
 .key.ly-ran{background:var(--c-ran)}.key.ly-ren{background:var(--c-ren)}.key.ly-poacb{background:var(--c-poacb)}
+.key.ly-zpe,.key.ly-zec{background:var(--c-natura)}.key.ly-incendio{background:var(--c-incendio)}
 .key[data-role="absent"]{opacity:.45}
 /* zoning */
 .zrow{display:flex;flex-wrap:wrap;align-items:baseline;gap:8px 12px;padding:9px 0;border-bottom:1px solid var(--hair)}

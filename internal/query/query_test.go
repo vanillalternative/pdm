@@ -58,6 +58,32 @@ func jsonClient(t *testing.T, body string, sawURL *string) *http.Client {
 	})}
 }
 
+const emptyFC = `{"type":"FeatureCollection","features":[]}`
+
+// routedClient answers each request with the body whose key is a substring of
+// the URL (empty FeatureCollection otherwise), recording seen URLs.
+func routedClient(t *testing.T, routes map[string]string, sawURLs *[]string) *http.Client {
+	t.Helper()
+	return &http.Client{Transport: rtFunc(func(r *http.Request) (*http.Response, error) {
+		u := r.URL.String()
+		if sawURLs != nil {
+			*sawURLs = append(*sawURLs, u)
+		}
+		body := emptyFC
+		for sub, b := range routes {
+			if strings.Contains(u, sub) {
+				body = b
+				break
+			}
+		}
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Body:       io.NopCloser(strings.NewReader(body)),
+			Header:     http.Header{"Content-Type": []string{"application/geo+json"}},
+		}, nil
+	})}
+}
+
 func TestPointTomarCentre(t *testing.T) {
 	res, err := newEngine(t).Point(context.Background(), -8.41, 39.60)
 	if err != nil {
@@ -119,13 +145,14 @@ const ouremCRUS = `{"type":"FeatureCollection","features":[{"type":"Feature","pr
 "geometry":{"type":"Polygon","coordinates":[[[-8.7,39.6],[-8.5,39.6],[-8.5,39.76],[-8.7,39.76],[-8.7,39.6]]]}}]}`
 
 // TestPointGenericMunicipality: a municipality without a dedicated adapter is
-// served by the generic CRUS adapter — zoning only, fetched live, capped at
-// low confidence, and honestly annotated.
+// served by the generic adapter — zoning from CRUS plus the national SRUP
+// constraints, all fetched live, capped at low confidence, and honestly
+// annotated.
 func TestPointGenericMunicipality(t *testing.T) {
-	var sawURL string
+	var sawURLs []string
 	// Live=false on purpose: the generic adapter must fetch live regardless,
 	// because no bundled snapshot exists for it.
-	eng := newEngineOpts(t, source.Options{Live: false, HTTP: jsonClient(t, ouremCRUS, &sawURL)})
+	eng := newEngineOpts(t, source.Options{Live: false, HTTP: routedClient(t, map[string]string{"collections/crus/": ouremCRUS}, &sawURLs)})
 	res, err := eng.Point(context.Background(), -8.60, 39.68) // Ourém
 	if err != nil {
 		t.Fatal(err)
@@ -136,8 +163,14 @@ func TestPointGenericMunicipality(t *testing.T) {
 	if len(res.Zoning) != 1 || res.Zoning[0].Label != "Solo Rústico - Espaços Agrícolas" {
 		t.Errorf("unexpected zoning: %+v", res.Zoning)
 	}
-	if len(res.Constraints) != 0 {
-		t.Errorf("generic adapter must not report constraints, got %+v", res.Constraints)
+	// National SRUP constraints are evaluated (absent here — empty stub).
+	if len(res.Constraints) != 3 {
+		t.Fatalf("expected the 3 national SRUP constraints, got %+v", res.Constraints)
+	}
+	for _, c := range res.Constraints {
+		if c.Present {
+			t.Errorf("constraint %s should be absent with empty stub data", c.Type)
+		}
 	}
 	if res.Regulation != nil {
 		t.Error("generic adapter must not attach regulation")
@@ -148,11 +181,56 @@ func TestPointGenericMunicipality(t *testing.T) {
 	if !hasNoteContaining(res.Notes, "not yet integrated") {
 		t.Errorf("expected zoning-only caveat note, got %v", res.Notes)
 	}
-	if !strings.Contains(sawURL, "collections/crus/items") || !strings.Contains(sawURL, "dtcc=1421") {
-		t.Errorf("expected CRUS fetch filtered by dtcc, got %s", sawURL)
+	joined := strings.Join(sawURLs, "\n")
+	if !strings.Contains(joined, "collections/crus/items") || !strings.Contains(joined, "dtcc=1421") {
+		t.Errorf("expected CRUS fetch filtered by dtcc, got %s", joined)
+	}
+	for _, coll := range []string{"srup_zpe", "srup_zec", "srup_perigosidade_inc_rural"} {
+		if !strings.Contains(joined, coll) {
+			t.Errorf("expected a %s fetch, got %s", coll, joined)
+		}
 	}
 	if len(res.Sources) == 0 || res.Sources[0].Provenance != model.ProvenanceOfficialLive {
 		t.Errorf("expected official-live source, got %+v", res.Sources)
+	}
+}
+
+// ouremZEC is a canned ZEC polygon covering the Ourém test point; ouremFire is
+// a fire-hazard response mixing a low class (must be ignored) and a high class
+// polygon that does NOT cover the test point.
+const ouremZEC = `{"type":"FeatureCollection","features":[{"type":"Feature","properties":{
+"designacao":"SICÓ/ALVAIÁZERE","servidao":"REDE NATURA 2000 - ZONAS ESPECIAIS DE CONSERVAÇÃO"},
+"geometry":{"type":"Polygon","coordinates":[[[-8.7,39.6],[-8.5,39.6],[-8.5,39.76],[-8.7,39.76],[-8.7,39.6]]]}}]}`
+
+const ouremFire = `{"type":"FeatureCollection","features":[
+{"type":"Feature","properties":{"tipologia":"Baixa"},
+"geometry":{"type":"Polygon","coordinates":[[[-8.7,39.6],[-8.5,39.6],[-8.5,39.76],[-8.7,39.76],[-8.7,39.6]]]}},
+{"type":"Feature","properties":{"tipologia":"Muito Alta"},
+"geometry":{"type":"Polygon","coordinates":[[[-8.62,39.70],[-8.61,39.70],[-8.61,39.71],[-8.62,39.71],[-8.62,39.70]]]}}]}`
+
+// TestPointGenericNationalConstraints: the SRUP layers mark presence and carry
+// details, and the fire-hazard layer ignores the non-restrictive classes.
+func TestPointGenericNationalConstraints(t *testing.T) {
+	eng := newEngineOpts(t, source.Options{Live: false, HTTP: routedClient(t, map[string]string{
+		"collections/crus/":           ouremCRUS,
+		"srup_zec":                    ouremZEC,
+		"srup_perigosidade_inc_rural": ouremFire,
+	}, nil)})
+	res, err := eng.Point(context.Background(), -8.60, 39.68) // Ourém
+	if err != nil {
+		t.Fatal(err)
+	}
+	zec := findConstraint(res.Constraints, "Natura 2000 — ZEC")
+	if zec == nil || !zec.Present || zec.Detail != "SICÓ/ALVAIÁZERE" {
+		t.Errorf("expected ZEC present with designação, got %+v", zec)
+	}
+	if zpe := findConstraint(res.Constraints, "Natura 2000 — ZPE"); zpe == nil || zpe.Present {
+		t.Errorf("expected ZPE absent (empty stub), got %+v", zpe)
+	}
+	// The point sits inside the "Baixa" polygon (filtered out) and outside the
+	// "Muito Alta" one — the constraint must be absent.
+	if fire := findConstraint(res.Constraints, "Perigosidade de incêndio rural"); fire == nil || fire.Present {
+		t.Errorf("expected fire hazard absent (only high classes count), got %+v", fire)
 	}
 }
 
@@ -220,9 +298,10 @@ func squareAround(t *testing.T, lon, lat, half float64) geom.Geometry {
 }
 
 // TestPolygonGenericMunicipality: the parcel path through the generic adapter —
-// zoning breakdown from a live CRUS fetch, no constraints, caveat note.
+// zoning breakdown from a live CRUS fetch, national constraints evaluated
+// (absent with empty stubs), caveat note.
 func TestPolygonGenericMunicipality(t *testing.T) {
-	eng := newEngineOpts(t, source.Options{Live: false, HTTP: jsonClient(t, ouremCRUS, nil)})
+	eng := newEngineOpts(t, source.Options{Live: false, HTTP: routedClient(t, map[string]string{"collections/crus/": ouremCRUS}, nil)})
 	g := squareAround(t, -8.60, 39.68, 0.001) // inside Ourém and the stub zoning polygon
 	res, err := eng.Polygon(context.Background(), g)
 	if err != nil {
@@ -237,8 +316,13 @@ func TestPolygonGenericMunicipality(t *testing.T) {
 	if res.Zoning[0].Percent < 99 || res.Zoning[0].Percent > 100.5 {
 		t.Errorf("parcel fully inside the zoning polygon should be ~100%%, got %.1f", res.Zoning[0].Percent)
 	}
-	if len(res.Constraints) != 0 {
-		t.Errorf("generic adapter must not report constraints, got %+v", res.Constraints)
+	if len(res.Constraints) != 3 {
+		t.Fatalf("expected the 3 national SRUP constraints, got %+v", res.Constraints)
+	}
+	for _, c := range res.Constraints {
+		if c.Present {
+			t.Errorf("constraint %s should be absent with empty stub data", c.Type)
+		}
 	}
 	if !hasNoteContaining(res.Notes, "not yet integrated") {
 		t.Errorf("expected zoning-only caveat note, got %v", res.Notes)
@@ -269,7 +353,7 @@ func TestPolygonAutonomousRegion(t *testing.T) {
 // TestMapsGenericMunicipality: the map builders must render for generic
 // municipalities (they used to return nil for anything but Tomar).
 func TestMapsGenericMunicipality(t *testing.T) {
-	eng := newEngineOpts(t, source.Options{Live: false, HTTP: jsonClient(t, ouremCRUS, nil)})
+	eng := newEngineOpts(t, source.Options{Live: false, HTTP: routedClient(t, map[string]string{"collections/crus/": ouremCRUS}, nil)})
 	pm := eng.PointMap(context.Background(), -8.60, 39.68)
 	if pm == nil {
 		t.Fatal("PointMap should render for a generic municipality")

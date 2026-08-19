@@ -11,6 +11,7 @@ import (
 	"github.com/bernardosimoes/pdm/data"
 	"github.com/bernardosimoes/pdm/internal/adapter"
 	"github.com/bernardosimoes/pdm/internal/adapter/crus"
+	"github.com/bernardosimoes/pdm/internal/adapter/srup"
 	"github.com/bernardosimoes/pdm/internal/model"
 	"github.com/bernardosimoes/pdm/internal/reg"
 	"github.com/bernardosimoes/pdm/internal/source"
@@ -88,7 +89,7 @@ func bundledMeta(name, layer string) model.Source {
 }
 
 func (a *Adapter) Layers(opts source.Options) []adapter.Layer {
-	return []adapter.Layer{
+	layers := []adapter.Layer{
 		{
 			ID:       "ordenamento",
 			Title:    "Ordenamento — classificação e qualificação do solo (CRUS/PDM)",
@@ -121,6 +122,12 @@ func (a *Adapter) Layers(opts source.Options) []adapter.Layer {
 			Detail:     func(f spatial.Feature) string { return f.Prop("designacao", "servidao") },
 		},
 	}
+	if opts.Live {
+		// National SRUP constraints (Natura 2000, fire hazard) have no bundled
+		// snapshot, so they join only in live mode — offline stays offline.
+		layers = append(layers, srup.Layers(opts)...)
+	}
+	return layers
 }
 
 // ordenamentoLoader: live DGT CRUS (dtcc+bbox filtered) first, then bundled

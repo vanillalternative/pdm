@@ -14,7 +14,12 @@ func fixtureResult() *model.PointResult {
 		Supported:    true,
 		Plan:         &model.PlanInfo{Name: "PDM de Tomar", Kind: "PDM", Municipality: "Tomar"},
 		Zoning:       []model.ZoningHit{{Class: "Solo rústico", Subclass: "Espaços agrícolas", Label: "Solo rústico — Espaços agrícolas", Layer: "ordenamento"}},
-		Constraints:  []model.ConstraintHit{{Type: "REN", Label: "Reserva Ecológica Nacional", Present: true, Layer: "ren"}},
+		Constraints: []model.ConstraintHit{
+			{Type: "RAN", Label: "Reserva Agrícola Nacional", Present: false, Layer: "ran"},
+			{Type: "REN", Label: "Reserva Ecológica Nacional", Present: true, Layer: "ren"},
+			{Type: "Natura 2000 — ZEC", Label: "Rede Natura 2000 — ZEC", Present: false, Layer: "zec"},
+			{Type: "Perigosidade de incêndio rural", Label: "Perigosidade de Incêndio Rural", Present: false, Layer: "incendio"},
+		},
 		Regulation: &model.Regulation{
 			Reference: "Aviso n.º 1/2020",
 			Articles:  []model.Article{{Number: "31.º", Title: "Espaços agrícolas", Text: "Nos espaços agrícolas..."}},
@@ -41,9 +46,50 @@ func TestBuildPointPayload(t *testing.T) {
 			t.Errorf("payload result missing %q", want)
 		}
 	}
-	// Constraints and regulation are present, so only the always-on gap remains.
+	// Every constraint family was evaluated and regulation is present, so only
+	// the always-on gap remains.
 	if len(p.DataGaps) != 1 || !strings.Contains(p.DataGaps[0], "acessos") {
 		t.Errorf("unexpected data gaps: %v", p.DataGaps)
+	}
+}
+
+// TestBuildPayloadPartialConstraintGaps: national-only coverage (the generic
+// adapter) flags the municipal gap; missing national layers flag theirs.
+func TestBuildPayloadPartialConstraintGaps(t *testing.T) {
+	r := fixtureResult()
+	// Generic-adapter shape: only the national layers were evaluated.
+	r.Constraints = []model.ConstraintHit{
+		{Type: "Natura 2000 — ZPE", Present: false},
+		{Type: "Natura 2000 — ZEC", Present: false},
+		{Type: "Perigosidade de incêndio rural", Present: true},
+	}
+	p, err := BuildPointPayload(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	joined := strings.Join(p.DataGaps, "\n")
+	if !strings.Contains(joined, "Condicionantes municipais") {
+		t.Errorf("expected municipal-constraints gap, got %v", p.DataGaps)
+	}
+	if strings.Contains(joined, "Condicionantes nacionais") {
+		t.Errorf("national constraints were evaluated — no national gap expected, got %v", p.DataGaps)
+	}
+
+	// Tomar-offline shape: municipal layers evaluated, national ones not.
+	r.Constraints = []model.ConstraintHit{
+		{Type: "RAN", Present: false},
+		{Type: "REN", Present: true},
+	}
+	p, err = BuildPointPayload(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	joined = strings.Join(p.DataGaps, "\n")
+	if !strings.Contains(joined, "Condicionantes nacionais") {
+		t.Errorf("expected national-constraints gap, got %v", p.DataGaps)
+	}
+	if strings.Contains(joined, "Condicionantes municipais") {
+		t.Errorf("municipal constraints were evaluated — no municipal gap expected, got %v", p.DataGaps)
 	}
 }
 

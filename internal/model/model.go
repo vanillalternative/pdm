@@ -39,6 +39,10 @@ const (
 	// Any result touching a sample layer is downgraded to low confidence and
 	// clearly flagged.
 	ProvenanceSample Provenance = "sample"
+	// ProvenanceRecordedMirror means served from the pdms web store's mirror of
+	// zoning polygons recorded by this tool's own past official queries — a fast
+	// local re-serve of previously fetched official data, not a fresh fetch.
+	ProvenanceRecordedMirror Provenance = "recorded-mirror"
 )
 
 // Source is an attribution record for a piece of data used in a result.

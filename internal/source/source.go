@@ -19,6 +19,7 @@ import (
 	"github.com/bernardosimoes/pdm/internal/cache"
 	"github.com/bernardosimoes/pdm/internal/model"
 	"github.com/bernardosimoes/pdm/internal/spatial"
+	"github.com/peterstace/simplefeatures/geom"
 )
 
 // Loaded is a resolved set of features plus the attribution describing where
@@ -47,6 +48,14 @@ type Options struct {
 	BBox           *BBox         // spatial filter for live requests
 	AttemptTimeout time.Duration // per-request attempt timeout (0 = package default)
 	MaxAttempts    int           // live-fetch attempts (0 = package default)
+
+	// TruthAPI is the base URL of the pdms truth-mirror server (empty = mirror
+	// disabled). Consulted for recorded zoning before the official sources.
+	TruthAPI string
+	// Subject is the exact query geometry (WGS84). The truth mirror answers only
+	// when its recorded polygons demonstrably cover the subject; the zero value
+	// makes the mirror always miss — conservative by construction.
+	Subject geom.Geometry
 }
 
 func (o Options) client() *http.Client {

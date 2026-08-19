@@ -143,10 +143,12 @@ func runSupported(stdout, stderr io.Writer) int {
 	if resolver, err := admin.NewResolver(data.Municipalities); err == nil {
 		count = resolver.Count()
 	}
-	fmt.Fprintf(stdout, "Fully integrated municipalities (bundled layers + parsed regulation):\n")
+	fmt.Fprintf(stdout, "Municipalities with a dedicated adapter (richer local sources):\n")
 	for _, m := range registry.Supported() {
 		fmt.Fprintf(stdout, "  - %s\n", m)
 	}
+	fmt.Fprintf(stdout, "  (Tomar additionally bundles its municipal layers and parsed regulation;\n")
+	fmt.Fprintf(stdout, "  Mafra and Ourém query their municipal geoservices live.)\n")
 	fmt.Fprintf(stdout, "\nEvery other mainland municipality (%d total in CAOP) is supported for:\n", count)
 	fmt.Fprintf(stdout, "  - zoning: national DGT CRUS dataset, queried live (cached locally);\n")
 	fmt.Fprintf(stdout, "  - constraints: RAN and REN (DGT/SNIT SRUP), áreas protegidas, albufeiras\n")

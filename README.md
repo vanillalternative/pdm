@@ -367,12 +367,16 @@ gofmt -l .
 
 ## Limitations
 
-- Only **Tomar** has full support (constraints + Regulamento); every other
-  mainland municipality is **zoning-only** — its results carry an explicit note
-  and low confidence, and missing constraints must not be read as absent ones.
+- Only **Tomar** has full support (bundled municipal constraint layers +
+  parsed Regulamento); every other mainland municipality gets live CRUS zoning
+  plus the national constraint layers at **medium confidence**, with an
+  explicit note that municipality-specific condicionantes and the written
+  regulation are not integrated — missing local detail must not be read as
+  absence.
 - The **Azores and Madeira** are not covered (mainland DGT datasets only).
-- Zoning-only municipalities require **network** on first query (live CRUS
-  fetch, then cached).
+- Municipalities without bundled data require **network** on first query (live
+  CRUS zoning, national constraint probes and SRUP geometry layers; responses
+  are cached).
 - Bundled boundaries are simplified (~30 m) for resolution; near a municipal
   border the resolved municipality may be wrong.
 - Beyond RAN/REN, other *servidões/restrições de utilidade pública* (protected

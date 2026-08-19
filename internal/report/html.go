@@ -304,11 +304,13 @@ const css = `
  --bg:#f2efe8;--panel:#faf8f3;--ink:#20303a;--muted:#6a7780;--hair:#ddd5c7;--accent:#2a7f9e;
  --good:#2f7d5b;--good-bg:#e4f1ea;--warn:#b4562a;--warn-bg:#f6e7dd;
  --c-boundary:#5a6a74;--c-zoning:#8a6fb0;--c-ran:#4e8a4a;--c-ren:#3f7fbf;--c-poacb:#2a8fa8;--c-subject:#d8442a;
+ --c-natura:#6d8f2f;--c-incendio:#c2652a;
 }
 @media (prefers-color-scheme:dark){:root{
  --bg:#0d1418;--panel:#131e24;--ink:#e2e9ed;--muted:#93a4ac;--hair:#26343c;--accent:#3fa8c9;
  --good:#57c491;--good-bg:#123024;--warn:#e6905e;--warn-bg:#33201400;--warn-bg:#331f14;
  --c-boundary:#8ea0ab;--c-zoning:#b498dd;--c-ran:#6fc06a;--c-ren:#6aa8e6;--c-poacb:#45bcd6;--c-subject:#ff6a4d;
+ --c-natura:#9dc356;--c-incendio:#e8915a;
 }}
 :root[data-theme="light"]{--bg:#f2efe8;--panel:#faf8f3;--ink:#20303a;--muted:#6a7780;--hair:#ddd5c7;--good-bg:#e4f1ea;--warn-bg:#f6e7dd;--c-subject:#d8442a}
 :root[data-theme="dark"]{--bg:#0d1418;--panel:#131e24;--ink:#e2e9ed;--muted:#93a4ac;--hair:#26343c;--good-bg:#123024;--warn-bg:#331f14;--c-subject:#ff6a4d}
@@ -354,6 +356,8 @@ section{margin:26px 0}
 .ly-ran{fill:var(--c-ran);stroke:var(--c-ran)}
 .ly-ren{fill:var(--c-ren);stroke:var(--c-ren)}
 .ly-poacb{fill:var(--c-poacb);stroke:var(--c-poacb)}
+.ly-zpe,.ly-zec{fill:var(--c-natura);stroke:var(--c-natura)}
+.ly-incendio{fill:var(--c-incendio);stroke:var(--c-incendio)}
 .ly[data-role="absent"]{fill-opacity:.12;stroke-dasharray:4 3}
 .ly[data-role="present"]{fill-opacity:.42}
 .subject-poly{fill:none;stroke:var(--c-subject);stroke-width:2.4;stroke-dasharray:6 3}
@@ -370,6 +374,7 @@ section{margin:26px 0}
 .key.ly-boundary{background:transparent;border-color:var(--c-boundary)}
 .key.ly-zoning{background:var(--c-zoning);opacity:.5}
 .key.ly-ran{background:var(--c-ran)}.key.ly-ren{background:var(--c-ren)}.key.ly-poacb{background:var(--c-poacb)}
+.key.ly-zpe,.key.ly-zec{background:var(--c-natura)}.key.ly-incendio{background:var(--c-incendio)}
 .key[data-role="absent"]{opacity:.45}
 /* zoning */
 .zrow{display:flex;flex-wrap:wrap;align-items:baseline;gap:8px 12px;padding:9px 0;border-bottom:1px solid var(--hair)}

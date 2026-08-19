@@ -307,12 +307,9 @@ func (e *Engine) PointMap(ctx context.Context, lon, lat float64) *mapview.Data {
 	opts.BBox = &bb
 	pt := spatial.Point(lon, lat)
 
-	for _, layer := range ad.Layers(opts) {
-		if layer.Probe != nil {
-			continue // probe layers carry no geometry to draw
-		}
-		loaded, err := layer.Loader(ctx)
-		if err != nil {
+	for _, ll := range prefetchMapLayers(ctx, geometryLayers(ad, opts)) {
+		layer, loaded := ll.layer, ll.loaded
+		if ll.err != nil {
 			continue
 		}
 		switch layer.Kind {
@@ -413,12 +410,9 @@ func (e *Engine) PolygonMap(ctx context.Context, g geom.Geometry) *mapview.Data 
 	bb := view.bbox()
 	opts.BBox = &bb
 	total := crs.AreaM2(g)
-	for _, layer := range ad.Layers(opts) {
-		if layer.Probe != nil {
-			continue // probe layers carry no geometry to draw
-		}
-		loaded, err := layer.Loader(ctx)
-		if err != nil {
+	for _, ll := range prefetchMapLayers(ctx, geometryLayers(ad, opts)) {
+		layer, loaded := ll.layer, ll.loaded
+		if ll.err != nil {
 			continue
 		}
 		if layer.Kind == adapter.KindZoning {
@@ -526,6 +520,24 @@ func zoningColor(c adapter.Classification) string {
 // canonical constraint type the adapter already provides (e.g. Tomar's bundled
 // RAN/REN) are skipped — the dedicated source is richer.
 func composeLayers(ad adapter.Adapter, name, code string, opts source.Options) []adapter.Layer {
+	layers := geometryLayers(ad, opts)
+	skip := map[string]bool{}
+	for _, l := range layers {
+		if l.Constraint != "" {
+			skip[l.Constraint] = true
+		}
+	}
+	return append(layers, national.Layers(name, code, opts, skip)...)
+}
+
+// geometryLayers is the drawable layer set: the adapter's own layers plus the
+// national SRUP geometry layers (Rede Natura 2000 ZPE/ZEC, rural fire hazard),
+// deduped by constraint string. The geometry layers come before the national
+// probes in composeLayers: geometry yields real overlap area and percentages,
+// so where both exist the geometry layer wins and the equivalent probe is
+// skipped. The map builders use this same set, so every geometry constraint
+// the report lists is also drawable on the locator map.
+func geometryLayers(ad adapter.Adapter, opts source.Options) []adapter.Layer {
 	layers := ad.Layers(opts)
 	skip := map[string]bool{}
 	for _, l := range layers {
@@ -533,11 +545,6 @@ func composeLayers(ad adapter.Adapter, name, code string, opts source.Options) [
 			skip[l.Constraint] = true
 		}
 	}
-	// National SRUP geometry layers (Rede Natura 2000 ZPE/ZEC, rural fire
-	// hazard) come before the probes: geometry yields real overlap area and
-	// percentages, so where both exist the geometry layer wins and the
-	// equivalent probe is skipped. The probes then fill in everything else
-	// (RAN, REN, protected areas, albufeiras, coastal instruments).
 	for _, l := range srup.Layers(opts) {
 		if skip[l.Constraint] {
 			continue
@@ -545,7 +552,38 @@ func composeLayers(ad adapter.Adapter, name, code string, opts source.Options) [
 		skip[l.Constraint] = true
 		layers = append(layers, l)
 	}
-	return append(layers, national.Layers(name, code, opts, skip)...)
+	return layers
+}
+
+// loadedMapLayer pairs a drawable layer with its (attempted) load result.
+type loadedMapLayer struct {
+	layer  adapter.Layer
+	loaded source.Loaded
+	err    error
+}
+
+// prefetchMapLayers loads the drawable (non-probe) layers concurrently — each
+// live layer pays its own network latency, so sequential loading multiplies
+// it — preserving layer order for deterministic map output.
+func prefetchMapLayers(ctx context.Context, layers []adapter.Layer) []loadedMapLayer {
+	drawable := layers[:0:0]
+	for _, l := range layers {
+		if l.Probe == nil {
+			drawable = append(drawable, l)
+		}
+	}
+	out := make([]loadedMapLayer, len(drawable))
+	var wg sync.WaitGroup
+	for i, l := range drawable {
+		wg.Add(1)
+		go func(i int, l adapter.Layer) {
+			defer wg.Done()
+			loaded, err := l.Loader(ctx)
+			out[i] = loadedMapLayer{layer: l, loaded: loaded, err: err}
+		}(i, l)
+	}
+	wg.Wait()
+	return out
 }
 
 // evaled is one layer's outcome: features for geometry layers, a probe result

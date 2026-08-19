@@ -25,6 +25,7 @@ type AnalysisView struct {
 	IsPolygon    bool
 	Zoning       []model.ZoningHit
 	Constraints  []model.ConstraintHit
+	Instruments  []model.Instrument
 	Regulation   *model.Regulation
 	Sources      []model.Source
 	Confidence   model.Confidence
@@ -42,6 +43,7 @@ func NewPointAnalysisView(r *model.PointResult) AnalysisView {
 		Coord:        &c,
 		Zoning:       r.Zoning,
 		Constraints:  r.Constraints,
+		Instruments:  r.Instruments,
 		Regulation:   r.Regulation,
 		Sources:      r.Sources,
 		Confidence:   r.Confidence,
@@ -60,6 +62,7 @@ func NewPolygonAnalysisView(r *model.PolygonResult) AnalysisView {
 		IsPolygon:    true,
 		Zoning:       r.Zoning,
 		Constraints:  r.Constraints,
+		Instruments:  r.Instruments,
 		Regulation:   r.Regulation,
 		Sources:      r.Sources,
 		Confidence:   r.Confidence,
@@ -151,15 +154,33 @@ func AnalysisHTML(w io.Writer, v AnalysisView, a *ai.Analysis, gaps []string, ma
 	for _, c := range v.Constraints {
 		if v.IsPolygon {
 			extra := ""
-			if c.Present {
+			if c.Present && c.AreaM2 > 0 {
 				extra = fmt.Sprintf("%s m² · %s%%", area(c.AreaM2), pct(c.Percent))
 			}
-			chipHit(b, c, extra)
+			chipPt(b, c, extra)
 		} else {
-			chipHit(b, c, "")
+			chipPt(b, c, "")
 		}
 	}
 	b.WriteString(`</div></section>`)
+
+	if len(v.Instruments) > 0 {
+		b.WriteString(`<section><h2>Planos e programas especiais</h2>`)
+		b.WriteString(`<p class="muted">Contexto municipal do registo nacional (APA/ICNF/DGT/DRE); a presença na lista não significa que o local esteja dentro do instrumento, salvo indicação em contrário.</p><ul class="instruments">`)
+		for _, ins := range v.Instruments {
+			fmt.Fprintf(b, `<li class="ins ins-%s"><span class="ins-state">%s</span><span class="ins-name">%s</span>`,
+				h(ins.State), h(stateLabel(ins.State)), h(ins.Name))
+			fmt.Fprintf(b, `<span class="ins-here">%s</span>`, h(instrumentEvidencePt(ins)))
+			if ins.Diploma != "" {
+				fmt.Fprintf(b, `<span class="ins-dip">%s</span>`, h(ins.Diploma))
+			}
+			if ins.Status != "" {
+				fmt.Fprintf(b, `<span class="ins-status">%s</span>`, h(ins.Status))
+			}
+			b.WriteString(`</li>`)
+		}
+		b.WriteString(`</ul></section>`)
+	}
 
 	// Citations: each links to the verbatim article below.
 	if len(a.Citations) > 0 {
@@ -321,4 +342,38 @@ func viabilityLabel(signal string) string {
 	default:
 		return "Indeterminado"
 	}
+}
+
+// chipPt renders a pt-PT constraint chip for the analyse report. It mirrors
+// the plain report's chipHit states (including Unknown = data gap, never "no")
+// but keeps the page monolingual and skips the long explanatory notes — the
+// analysis prose and the limitations section carry that context here.
+func chipPt(b *strings.Builder, c model.ConstraintHit, extra string) {
+	state, cls := "não", "chip-no"
+	switch {
+	case c.Unknown:
+		state, cls = "desconhecido — sem dados na fonte", "chip-unk"
+	case c.Present && c.AreaM2 == 0:
+		state, cls = "sim (aprox.)", "chip-yes"
+	case c.Present:
+		state, cls = "sim", "chip-yes"
+	}
+	fmt.Fprintf(b, `<div class="chip %s"><span class="chip-k">%s</span><span class="chip-v">%s</span>`, cls, h(c.Type), state)
+	if c.Detail != "" {
+		fmt.Fprintf(b, `<span class="chip-d">%s</span>`, h(c.Detail))
+	}
+	if extra != "" {
+		fmt.Fprintf(b, `<span class="chip-d">%s</span>`, h(extra))
+	}
+	if c.Note != "" && (c.Present || c.Unknown) {
+		fmt.Fprintf(b, `<span class="chip-note"><strong>Nota da fonte:</strong> %s</span>`, h(c.Note))
+	}
+	b.WriteString(`</div>`)
+}
+
+func instrumentEvidencePt(i model.Instrument) string {
+	if i.PointInside != nil && *i.PointInside {
+		return "confirmado neste local por uma camada oficial correspondente"
+	}
+	return "contexto municipal; sobreposição com o local não confirmada por este relatório"
 }

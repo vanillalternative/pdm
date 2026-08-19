@@ -66,17 +66,36 @@ func AnalysisMarkdown(w io.Writer, v AnalysisView, a *ai.Analysis, gaps []string
 		fmt.Fprintf(b, "- (não avaliadas para este município)\n")
 	}
 	for _, c := range v.Constraints {
+		// Unknown means the source had no data — a gap, never a "não" (the
+		// same semantics every other renderer honours).
 		state := "não"
-		if c.Present {
+		switch {
+		case c.Unknown:
+			state = "desconhecido — sem dados na fonte"
+		case c.Present && c.AreaM2 == 0:
+			state = "sim (aprox.)"
+		case c.Present:
 			state = "sim"
 		}
 		line := fmt.Sprintf("- **%s:** %s", c.Type, state)
-		if v.IsPolygon && c.Present {
+		if v.IsPolygon && c.Present && c.AreaM2 > 0 {
 			line += fmt.Sprintf(" — %s m² / %s%%", area(c.AreaM2), pct(c.Percent))
 		} else if c.Detail != "" {
 			line += " — " + c.Detail
 		}
 		fmt.Fprintf(b, "%s\n", line)
+	}
+
+	if len(v.Instruments) > 0 {
+		fmt.Fprintf(b, "\n## Planos e programas especiais\n\n")
+		for _, ins := range v.Instruments {
+			line := fmt.Sprintf("- **%s** (%s)", ins.Name, stateLabel(ins.State))
+			if ins.Diploma != "" {
+				line += " — " + ins.Diploma
+			}
+			line += " — " + instrumentEvidencePt(ins)
+			fmt.Fprintf(b, "%s\n", line)
+		}
 	}
 
 	if len(a.Citations) > 0 {

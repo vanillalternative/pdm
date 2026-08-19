@@ -30,6 +30,7 @@ type Layer struct {
 	Label string
 	Role  Role
 	G     geom.Geometry
+	Color string // optional CSS color used for thematic sublayers
 }
 
 // Data is everything the map needs.
@@ -76,7 +77,11 @@ func (d *Data) SVG() string {
 			}
 			polys, _ := geomShapes(ly.G, proj)
 			for _, p := range polys {
-				fmt.Fprintf(&b, `<path class="ly ly-%s" data-role="%s" d="%s"/>`, ly.ID, ly.Role, p)
+				style := ""
+				if ly.Color != "" {
+					style = fmt.Sprintf(` style="fill:%s;stroke:%s"`, esc(ly.Color), esc(ly.Color))
+				}
+				fmt.Fprintf(&b, `<path class="ly ly-%s" data-role="%s"%s d="%s"/>`, ly.ID, ly.Role, style, p)
 			}
 		}
 	}
@@ -147,7 +152,11 @@ func legend(layers []Layer, subjectKind string) string {
 		if ly.Role == RolePresent {
 			suffix = " ✓"
 		}
-		fmt.Fprintf(&b, `<span><i class="key ly-%s" data-role="%s"></i>%s%s</span>`, ly.ID, ly.Role, esc(ly.Label), suffix)
+		style := ""
+		if ly.Color != "" {
+			style = fmt.Sprintf(` style="background:%s;border-color:%s"`, esc(ly.Color), esc(ly.Color))
+		}
+		fmt.Fprintf(&b, `<span><i class="key ly-%s" data-role="%s"%s></i>%s%s</span>`, ly.ID, ly.Role, style, esc(ly.Label), suffix)
 	}
 	b.WriteString(`</figcaption>`)
 	return b.String()

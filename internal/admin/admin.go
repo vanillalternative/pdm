@@ -5,18 +5,30 @@ package admin
 
 import (
 	"fmt"
+	"sort"
 
 	"github.com/bernardosimoes/pdm/internal/crs"
 	"github.com/bernardosimoes/pdm/internal/spatial"
 	"github.com/peterstace/simplefeatures/geom"
 )
 
-// nameFields lists the property keys that may hold a municipality name across
-// CAOP releases and derived datasets.
-var nameFields = []string{
-	"Concelho", "concelho", "MUNICIPIO", "Municipio", "municipio",
-	"NAME_2", "name", "Concelho_D", "DESIGNCONC", "des_simpli",
+// Municipality identifies a resolved municipality (concelho) from CAOP.
+type Municipality struct {
+	Name     string
+	Code     string // CAOP dtmn code (distrito+município, e.g. "1418")
+	District string // distrito_ilha
 }
+
+// Property keys that may hold each municipality attribute across CAOP releases
+// and derived datasets.
+var (
+	nameFields = []string{
+		"Concelho", "concelho", "MUNICIPIO", "Municipio", "municipio",
+		"NAME_2", "name", "Concelho_D", "DESIGNCONC", "des_simpli",
+	}
+	codeFields     = []string{"dtmn", "DTMN", "dico", "DICO", "dtcc"}
+	districtFields = []string{"distrito_ilha", "Distrito", "distrito", "NAME_1"}
+)
 
 // Resolver answers "which municipality is here?" from boundary polygons.
 type Resolver struct {
@@ -36,23 +48,55 @@ func NewResolver(boundaries []byte) (*Resolver, error) {
 	return &Resolver{features: feats}, nil
 }
 
-func name(f spatial.Feature) string {
-	if n := f.Prop(nameFields...); n != "" {
-		return n
-	}
-	return "(unknown municipality)"
+// Count returns the number of municipalities in the boundary dataset.
+func (r *Resolver) Count() int { return len(r.features) }
+
+// Info is Municipality plus geometry-derived data for listings/pages.
+type Info struct {
+	Municipality
+	CentroidLon, CentroidLat float64
+	BBox                     [4]float64 // minLon, minLat, maxLon, maxLat (WGS84)
 }
 
-// ResolvePoint returns the municipality name containing the point, or ok=false
-// if the point falls outside all known boundaries.
-func (r *Resolver) ResolvePoint(lon, lat float64) (string, bool) {
+// List returns every municipality in the boundary dataset, code-ordered.
+func (r *Resolver) List() []Info {
+	out := make([]Info, 0, len(r.features))
+	for _, f := range r.features {
+		info := Info{Municipality: municipality(f)}
+		if xy, ok := f.Geometry.Centroid().XY(); ok {
+			info.CentroidLon, info.CentroidLat = xy.X, xy.Y
+		}
+		if min, max, ok := f.Geometry.Envelope().MinMaxXYs(); ok {
+			info.BBox = [4]float64{min.X, min.Y, max.X, max.Y}
+		}
+		out = append(out, info)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Code < out[j].Code })
+	return out
+}
+
+func municipality(f spatial.Feature) Municipality {
+	m := Municipality{
+		Name:     f.Prop(nameFields...),
+		Code:     f.Prop(codeFields...),
+		District: f.Prop(districtFields...),
+	}
+	if m.Name == "" {
+		m.Name = "(unknown municipality)"
+	}
+	return m
+}
+
+// ResolvePoint returns the municipality containing the point, or ok=false if
+// the point falls outside all known boundaries.
+func (r *Resolver) ResolvePoint(lon, lat float64) (Municipality, bool) {
 	pt := spatial.Point(lon, lat)
 	for _, f := range r.features {
 		if spatial.Intersects(pt, f.Geometry) {
-			return name(f), true
+			return municipality(f), true
 		}
 	}
-	return "", false
+	return Municipality{}, false
 }
 
 // BoundaryAt returns the boundary geometry of the municipality containing the
@@ -69,7 +113,7 @@ func (r *Resolver) BoundaryAt(lon, lat float64) (geom.Geometry, bool) {
 
 // Overlap describes how much of an input polygon falls in a municipality.
 type Overlap struct {
-	Municipality string
+	Municipality Municipality
 	AreaM2       float64
 	Percent      float64
 }
@@ -96,7 +140,7 @@ func (r *Resolver) ResolvePolygon(g geom.Geometry) (Overlap, []Overlap, bool) {
 		if total > 0 {
 			pct = area / total * 100
 		}
-		overlaps = append(overlaps, Overlap{Municipality: name(f), AreaM2: area, Percent: pct})
+		overlaps = append(overlaps, Overlap{Municipality: municipality(f), AreaM2: area, Percent: pct})
 	}
 	if len(overlaps) == 0 {
 		return Overlap{}, nil, false

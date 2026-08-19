@@ -24,6 +24,7 @@ func PointHTML(w io.Writer, r *model.PointResult, mapFigure string) error {
 		disclaimerHTML(b, r.Disclaimer)
 		return tail(w, b)
 	}
+	introHTML(b, pointIntro(r))
 	if mapFigure != "" {
 		b.WriteString(mapFigure)
 	}
@@ -39,12 +40,17 @@ func PointHTML(w io.Writer, r *model.PointResult, mapFigure string) error {
 	b.WriteString(`</section>`)
 
 	// Constraints
-	b.WriteString(`<section><h2>Constraints</h2><div class="chips">`)
+	b.WriteString(`<section><h2>Constraints</h2>`)
+	b.WriteString(`<p class="muted">Positive findings are regulatory risk flags for the queried location. Where a row says approximate, treat it as a warning to verify the official map extract before making a decision.</p><div class="chips">`)
+	if len(r.Constraints) == 0 {
+		b.WriteString(`<p class="muted">None evaluated for this municipality — see the notes below.</p>`)
+	}
 	for _, c := range r.Constraints {
-		chip(b, c.Type, c.Present, c.Detail, "")
+		chipHit(b, c, "")
 	}
 	b.WriteString(`</div></section>`)
 
+	instrumentsHTML(b, r.Instruments)
 	regulationHTML(b, r.Regulation)
 	sourcesHTML(b, r.Sources)
 	notesHTML(b, r.Notes)
@@ -67,26 +73,38 @@ func PolygonHTML(w io.Writer, r *model.PolygonResult, mapFigure string) error {
 		disclaimerHTML(b, r.Disclaimer)
 		return tail(w, b)
 	}
+	introHTML(b, polygonIntro(r))
 	if mapFigure != "" {
 		b.WriteString(mapFigure)
 	}
 
-	b.WriteString(`<section><h2>Zoning</h2><table><thead><tr><th>Category</th><th class="num">Area</th><th class="num">%</th></tr></thead><tbody>`)
-	for _, z := range r.Zoning {
-		fmt.Fprintf(b, `<tr><td>%s</td><td class="num">%s m²</td><td class="num">%s%%</td></tr>`, h(z.Label), area(z.AreaM2), pct(z.Percent))
+	b.WriteString(`<section><h2>Zoning</h2>`)
+	if len(r.Zoning) == 0 {
+		b.WriteString(`<p class="muted">No zoning category matched.</p>`)
+	} else {
+		b.WriteString(`<table><thead><tr><th>Category</th><th class="num">Area</th><th class="num">%</th></tr></thead><tbody>`)
+		for _, z := range r.Zoning {
+			fmt.Fprintf(b, `<tr><td>%s</td><td class="num">%s m²</td><td class="num">%s%%</td></tr>`, h(z.Label), area(z.AreaM2), pct(z.Percent))
+		}
+		b.WriteString(`</tbody></table>`)
 	}
-	b.WriteString(`</tbody></table></section>`)
+	b.WriteString(`</section>`)
 
-	b.WriteString(`<section><h2>Constraints</h2><div class="chips">`)
+	b.WriteString(`<section><h2>Constraints</h2>`)
+	b.WriteString(`<p class="muted">Positive findings are regulatory risk flags for the parcel. Approximate findings use the parcel envelope and do not measure the affected area.</p><div class="chips">`)
+	if len(r.Constraints) == 0 {
+		b.WriteString(`<p class="muted">None evaluated for this municipality — see the notes below.</p>`)
+	}
 	for _, c := range r.Constraints {
 		extra := ""
-		if c.Present {
+		if c.Present && c.AreaM2 > 0 {
 			extra = fmt.Sprintf("%s m² · %s%%", area(c.AreaM2), pct(c.Percent))
 		}
-		chip(b, c.Type, c.Present, "", extra)
+		chipHit(b, c, extra)
 	}
 	b.WriteString(`</div></section>`)
 
+	instrumentsHTML(b, r.Instruments)
 	regulationHTML(b, r.Regulation)
 	sourcesHTML(b, r.Sources)
 	notesHTML(b, r.Notes)
@@ -121,20 +139,83 @@ func confidenceChip(c model.Confidence) string {
 	return fmt.Sprintf(`<span class="conf conf-%s">confidence: %s</span>`, c, c)
 }
 
-func chip(b *strings.Builder, label string, present bool, detail, extra string) {
-	state := "no"
-	cls := "chip-no"
-	if present {
-		state, cls = "yes", "chip-yes"
+func chipHit(b *strings.Builder, c model.ConstraintHit, extra string) {
+	state, cls := "no", "chip-no"
+	switch {
+	case c.Unknown:
+		state, cls = "unknown", "chip-unk"
+	case c.Present:
+		state, cls = constraintPresence(c), "chip-yes"
 	}
-	fmt.Fprintf(b, `<div class="chip %s"><span class="chip-k">%s</span><span class="chip-v">%s</span>`, cls, h(label), state)
-	if detail != "" {
-		fmt.Fprintf(b, `<span class="chip-d">%s</span>`, h(detail))
+	fmt.Fprintf(b, `<div class="chip %s"><span class="chip-k">%s</span><span class="chip-v">%s</span>`, cls, h(c.Type), state)
+	if c.Detail != "" {
+		fmt.Fprintf(b, `<span class="chip-d">%s</span>`, h(c.Detail))
 	}
 	if extra != "" {
 		fmt.Fprintf(b, `<span class="chip-d">%s</span>`, h(extra))
 	}
+	if ev := constraintEvidence(c); ev != "" {
+		fmt.Fprintf(b, `<span class="chip-note"><strong>Evidence:</strong> %s</span>`, h(ev))
+	}
+	if m := constraintMeaning(c); m != "" && (c.Present || c.Unknown) {
+		fmt.Fprintf(b, `<span class="chip-note"><strong>Meaning:</strong> %s</span>`, h(m))
+	}
+	if l := constraintLimitation(c); l != "" {
+		fmt.Fprintf(b, `<span class="chip-note"><strong>Limitation:</strong> %s</span>`, h(l))
+	}
+	if n := constraintNextStep(c); n != "" {
+		fmt.Fprintf(b, `<span class="chip-note"><strong>Next check:</strong> %s</span>`, h(n))
+	}
+	if c.Note != "" && (c.Present || c.Unknown) {
+		fmt.Fprintf(b, `<span class="chip-note"><strong>Source caveat:</strong> %s</span>`, h(c.Note))
+	}
 	b.WriteString(`</div>`)
+}
+
+func introHTML(b *strings.Builder, intro reportIntro) {
+	if intro.Lead == "" && len(intro.Bullets) == 0 && len(intro.Articles) == 0 {
+		return
+	}
+	b.WriteString(`<section class="intro"><h2>Plain-language summary</h2>`)
+	if intro.Lead != "" {
+		fmt.Fprintf(b, `<p>%s</p>`, h(intro.Lead))
+	}
+	if len(intro.Bullets) > 0 {
+		b.WriteString(`<ul>`)
+		for _, s := range intro.Bullets {
+			fmt.Fprintf(b, `<li>%s</li>`, h(s))
+		}
+		b.WriteString(`</ul>`)
+	}
+	if len(intro.Articles) > 0 {
+		b.WriteString(`<h3>Matched articles in practical terms</h3><ul>`)
+		for _, s := range intro.Articles {
+			fmt.Fprintf(b, `<li>%s</li>`, h(s))
+		}
+		b.WriteString(`</ul>`)
+	}
+	b.WriteString(`</section>`)
+}
+
+func instrumentsHTML(b *strings.Builder, ins []model.Instrument) {
+	if len(ins) == 0 {
+		return
+	}
+	b.WriteString(`<section><h2>Special plans &amp; programs in this municipality</h2>`)
+	b.WriteString(`<p class="muted">These entries are municipal context from the bundled national registry (APA/ICNF/DGT/DRE). They do not mean the parcel is inside the instrument unless the evidence line says it was confirmed at this location.</p><ul class="instruments">`)
+	for _, i := range ins {
+		fmt.Fprintf(b, `<li class="ins ins-%s"><span class="ins-state">%s</span><span class="ins-name">%s</span>`,
+			h(i.State), h(stateLabel(i.State)), h(i.Name))
+		fmt.Fprintf(b, `<span class="ins-here">%s</span>`, h(instrumentEvidence(i)))
+		if i.Diploma != "" {
+			fmt.Fprintf(b, `<span class="ins-dip">%s</span>`, h(i.Diploma))
+		}
+		if i.Status != "" {
+			fmt.Fprintf(b, `<span class="ins-status">%s</span>`, h(i.Status))
+		}
+		b.WriteString(`</li>`)
+	}
+	b.WriteString(`</ul></section>`)
 }
 
 func regulationHTML(b *strings.Builder, reg *model.Regulation) {
@@ -276,13 +357,28 @@ th{font:600 11px ui-monospace,Menlo,monospace;text-transform:uppercase;letter-sp
 td{padding:8px;border-bottom:1px solid var(--hair);font-variant-numeric:tabular-nums}
 /* chips */
 .chips{display:flex;flex-wrap:wrap;gap:10px}
-.chip{display:inline-flex;align-items:center;gap:8px;padding:.5em .8em;border-radius:10px;border:1px solid var(--hair);
- background:var(--panel);font-size:14px}
+.chip{display:inline-flex;align-items:flex-start;gap:8px 10px;padding:.65em .85em;border-radius:10px;border:1px solid var(--hair);
+ background:var(--panel);font-size:14px;max-width:100%}
 .chip-k{font-weight:600}
 .chip-v{font:600 12px ui-monospace,Menlo,monospace;padding:.12em .5em;border-radius:6px}
 .chip-yes .chip-v{background:var(--warn-bg);color:var(--warn)}
 .chip-no .chip-v{background:var(--good-bg);color:var(--good)}
+.chip-unk .chip-v{background:var(--bg);color:var(--muted);border:1px dashed var(--hair)}
 .chip-d{color:var(--muted);font-size:12.5px}
+.chip-note{flex-basis:100%;color:var(--muted);font-size:12px}
+.chip-note strong{color:var(--ink);font-weight:600}
+/* special instruments */
+.instruments{list-style:none;padding:0;margin:0}
+.ins{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 10px;padding:10px 0;border-bottom:1px solid var(--hair);font-size:14px}
+.ins-state{font:600 10.5px ui-monospace,Menlo,monospace;text-transform:uppercase;letter-spacing:.05em;
+ padding:.2em .55em;border-radius:6px;border:1px solid var(--hair);color:var(--muted);white-space:nowrap}
+.ins-vigor .ins-state{color:var(--warn);background:var(--warn-bg);border-color:transparent}
+.ins-parcial .ins-state{color:var(--warn)}
+.ins-elaboracao .ins-state{color:var(--accent)}
+.ins-name{font-weight:600}
+.ins-here{font:600 11px ui-monospace,Menlo,monospace;color:var(--muted)}
+.ins-dip{color:var(--muted);font-size:12.5px}
+.ins-status{flex-basis:100%;color:var(--muted);font-size:12.5px}
 /* regulation */
 .art{border:1px solid var(--hair);border-radius:10px;margin:8px 0;background:var(--panel);overflow:hidden}
 .art summary{cursor:pointer;padding:11px 14px;font-weight:600;list-style:none}
@@ -297,6 +393,11 @@ td{padding:8px;border-bottom:1px solid var(--hair);font-variant-numeric:tabular-
 .srcs li{padding:6px 0;border-bottom:1px solid var(--hair)}
 .prov{font:600 11px ui-monospace,Menlo,monospace;color:var(--muted);margin-left:6px}
 .notes ul{padding-left:18px;color:var(--muted);font-size:14px}
+.intro{background:var(--panel);border:1px solid var(--hair);border-radius:12px;padding:16px 18px}
+.intro p{margin:0 0 10px;color:var(--ink)}
+.intro ul{margin:0;padding-left:18px;color:var(--ink);font-size:14px}
+.intro li{margin:7px 0}
+.intro h3{font-size:13px;margin:14px 0 8px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
 a{color:var(--accent)}
 footer{margin-top:28px;padding-top:16px;border-top:1px solid var(--hair);color:var(--muted);font-size:12.5px;line-height:1.6}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}

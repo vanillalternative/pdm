@@ -94,6 +94,7 @@ type ZoningHit struct {
 	Label    string `json:"label"`              // human-readable combined label
 	RawCode  string `json:"raw_code,omitempty"` // raw attribute value from the source layer
 	Layer    string `json:"layer"`              // source layer id
+	Color    string `json:"color,omitempty"`    // UI color shared by maps and legends
 	// The following are populated for polygon queries.
 	AreaM2  float64 `json:"area_m2,omitempty"`
 	Percent float64 `json:"percent,omitempty"`
@@ -105,11 +106,33 @@ type ConstraintHit struct {
 	Type    string `json:"type"`    // canonical type, e.g. "REN", "RAN"
 	Label   string `json:"label"`   // human-readable label
 	Present bool   `json:"present"` // whether it affects the location at all
+	// Unknown means the source has no data for this municipality — absence of
+	// data, not absence of the constraint. Present is false when Unknown.
+	Unknown bool   `json:"unknown,omitempty"`
 	Detail  string `json:"detail,omitempty"`
-	Layer   string `json:"layer"` // source layer id
+	Note    string `json:"note,omitempty"` // honest caveat about how this was determined
+	Layer   string `json:"layer"`          // source layer id
 	// Populated for polygon queries.
 	AreaM2  float64 `json:"area_m2,omitempty"`
 	Percent float64 `json:"percent,omitempty"`
+}
+
+// Instrument is a special planning instrument (plano/programa especial —
+// albufeira, orla costeira, área protegida, estuário) whose regime touches the
+// resolved municipality. Entries come from a bundled registry of every such
+// instrument in Portugal; PointInside is set when a live layer confirmed the
+// subject falls inside the instrument's area (nil = not verifiable here).
+type Instrument struct {
+	ID             string   `json:"id"`
+	Name           string   `json:"name"`
+	Kind           string   `json:"kind"`   // POAAP, PEAAP, POOC, POC, POAP, PEAP, POE, regime
+	Family         string   `json:"family"` // albufeira | costa | area-protegida | estuario
+	Diploma        string   `json:"diploma,omitempty"`
+	Status         string   `json:"status"` // free-text status as of the registry snapshot
+	State          string   `json:"state"`  // vigor | parcial | elaboracao | revogado | nunca-aprovado | regime
+	Municipalities []string `json:"municipalities,omitempty"`
+	Notes          string   `json:"notes,omitempty"`
+	PointInside    *bool    `json:"point_inside,omitempty"`
 }
 
 // PointResult answers "what applies at this coordinate?".
@@ -120,6 +143,7 @@ type PointResult struct {
 	Plan         *PlanInfo       `json:"plan,omitempty"`
 	Zoning       []ZoningHit     `json:"zoning"`
 	Constraints  []ConstraintHit `json:"constraints"`
+	Instruments  []Instrument    `json:"special_instruments,omitempty"`
 	Regulation   *Regulation     `json:"regulation,omitempty"`
 	Sources      []Source        `json:"sources"`
 	Confidence   Confidence      `json:"confidence"`
@@ -136,6 +160,7 @@ type PolygonResult struct {
 	AnalysedAreaM2 float64         `json:"analysed_area_m2"`
 	Zoning         []ZoningHit     `json:"zoning"`      // sorted desc by area
 	Constraints    []ConstraintHit `json:"constraints"` // sorted desc by area
+	Instruments    []Instrument    `json:"special_instruments,omitempty"`
 	Regulation     *Regulation     `json:"regulation,omitempty"`
 	Sources        []Source        `json:"sources"`
 	Confidence     Confidence      `json:"confidence"`

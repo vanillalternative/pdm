@@ -78,6 +78,19 @@ func TestRunPointIntegration(t *testing.T) {
 	}
 }
 
+func TestRunSupported(t *testing.T) {
+	var out, errb bytes.Buffer
+	code := Run([]string{"supported"}, &out, &errb)
+	if code != 0 {
+		t.Fatalf("exit %d, stderr=%q", code, errb.String())
+	}
+	for _, want := range []string{"Tomar", "CRUS", "mainland"} {
+		if !strings.Contains(out.String(), want) {
+			t.Errorf("supported output missing %q:\n%s", want, out.String())
+		}
+	}
+}
+
 func TestRunSwappedCoordsRejected(t *testing.T) {
 	var out, errb bytes.Buffer
 	code := Run([]string{"point", "-8.41", "39.60"}, &out, &errb)

@@ -1,0 +1,2254 @@
+{
+ "_source": {
+  "name": "Registo de planos/programas especiais de ordenamento do território (PEOT) — compilado de APA, ICNF, DGT/PCGT e DRE",
+  "note": "Inventário verificado (jul 2026): POAAP/PEAAP (albufeiras), POOC/POC (orla costeira), POE (estuários — nenhum aprovado), POAP/PEAP (áreas protegidas), PSRN2000. Estados voláteis — re-verificar PCGT/DRE periodicamente.",
+  "retrieved_at": "2026-07-06"
+ },
+ "instruments": [
+  {
+   "id": "poa-albufeiras-touvedo-alto-lindoso",
+   "name": "POA das Albufeiras do Touvedo e Alto Lindoso",
+   "kind": "POAAP",
+   "family": "albufeira",
+   "diploma": "RCM n.º 27/2004, de 8 de março",
+   "status": "em vigor",
+   "state": "vigor",
+   "municipalities": [
+    "Arcos de Valdevez",
+    "Ponte da Barca",
+    "Melgaço"
+   ],
+   "notes": "One plan covering two albufeiras (Alto Lindoso + Touvedo), rio Lima; Alto Lindoso extends into Spain.",
+   "subjects": [
+    "touvedo",
+    "alto lindoso"
+   ]
+  },
+  {
+   "id": "poaa-plano-ordenamento-albufeira-azibo",
+   "name": "POAA — Plano de Ordenamento da Albufeira do Azibo",
+   "kind": "POAAP",
+   "family": "albufeira",
+   "diploma": "Despacho conjunto publicado no DR 2.ª série n.º 133, de 8 de junho de 1993; revisão determinada pelo Despacho n.º 14003/2010; REVOGADO pela RCM n.º 52/2026, de 10 de março",
+   "status": "revoked (Mar 2026) — protection now under the statutory DL 107/2009 regime, no replacement programa especial",
+   "state": "revogado",
+   "municipalities": [
+    "Macedo de Cavaleiros",
+    "Bragança"
+   ],
+   "notes": "RCM 52/2026 explicitly states a special-nature IGT is no longer needed; DL 107/2009 regime applies. NOT a transposition-into-PDM case.",
+   "subjects": [
+    "azibo"
+   ]
+  },
+  {
+   "id": "poa-albufeira-canicada",
+   "name": "POA da Albufeira da Caniçada",
+   "kind": "POAAP",
+   "family": "albufeira",
+   "diploma": "RCM n.º 92/2002, de 7 de maio",
+   "status": "em vigor; PEAAP em elaboração (Despacho n.º 7011/2021, de 15 de julho)",
+   "state": "vigor",
+   "municipalities": [
+    "Vieira do Minho",
+    "Terras de Bouro",
+    "Montalegre"
+   ],
+   "notes": "",
+   "subjects": [
+    "canicada"
+   ]
+  },
+  {
+   "id": "poa-albufeiras-regua-carrapatelo",
+   "name": "POA das Albufeiras da Régua e do Carrapatelo",
+   "kind": "POAAP",
+   "family": "albufeira",
+   "diploma": "RCM n.º 62/2002, de 23 de março",
+   "status": "em vigor; PEAAP em elaboração (Despachos n.º 10200/2017, 2231/2024, 6315/2025)",
+   "state": "vigor",
+   "municipalities": [
+    "Alijó",
+    "Sabrosa",
+    "Lamego",
+    "Tabuaço",
+    "São João da Pesqueira",
+    "Armamar",
+    "Peso da Régua",
+    "Carrazeda de Ansiães",
+    "Baião",
+    "Mesão Frio",
+    "Resende",
+    "Marco de Canaveses",
+    "Cinfães"
+   ],
+   "notes": "Douro river run-of-river reservoirs; municipality union of the two albufeiras per DGT srup_albufeiras.",
+   "subjects": [
+    "regua",
+    "carrapatelo"
+   ]
+  },
+  {
+   "id": "poa-albufeira-crestuma-lever",
+   "name": "POA da Albufeira de Crestuma-Lever",
+   "kind": "POAAP",
+   "family": "albufeira",
+   "diploma": "RCM n.º 187/2007, de 21 de dezembro; suspensão parcial pela RCM n.º 60/2026, de 25 de março",
+   "status": "em vigor (com suspensão parcial desde Mar 2026); PEAAP em elaboração (Despachos n.º 10201/2017, 2322/2024, 5678/2025)",
+   "state": "parcial",
+   "municipalities": [
+    "Vila Nova de Gaia",
+    "Gondomar",
+    "Santa Maria da Feira",
+    "Castelo de Paiva",
+    "Penafiel",
+    "Marco de Canaveses",
+    "Cinfães"
+   ],
+   "notes": "",
+   "subjects": [
+    "crestuma lever"
+   ]
+  },
+  {
+   "id": "poa-albufeira-ermal",
+   "name": "POA da Albufeira do Ermal",
+   "kind": "POAAP",
+   "family": "albufeira",
+   "diploma": "RCM n.º 1/2013, de 9 de janeiro",
+   "status": "em vigor; PEAAP em elaboração (Despacho n.º 3843/2017, de 8 de maio)",
+   "state": "vigor",
+   "municipalities": [
+    "Vieira do Minho"
+   ],
+   "notes": "Last POAAP ever approved under the old regime (2013), together with Odeleite (2014).",
+   "subjects": [
+    "ermal"
+   ]
+  },
+  {
+   "id": "poa-albufeira-sabugal",
+   "name": "POA da Albufeira do Sabugal",
+   "kind": "POAAP",
+   "family": "albufeira",
+   "diploma": "RCM n.º 172/2008, de 21 de novembro; alterada pela RCM n.º 17/2015, de 6 de abril",
+   "status": "em vigor",
+   "state": "vigor",
+   "municipalities": [
+    "Sabugal"
+   ],
+   "notes": "",
+   "subjects": [
+    "sabugal"
+   ]
+  },
+  {
+   "id": "poa-albufeira-vilar",
+   "name": "POA da Albufeira do Vilar",
+   "kind": "POAAP",
+   "family": "albufeira",
+   "diploma": "RCM n.º 158/2004, de 5 de novembro",
+   "status": "em vigor; PEAAP com elaboração determinada (Despacho n.º 11483/2023, de 10 de novembro)",
+   "state": "vigor",
+   "municipalities": [
+    "Moimenta da Beira",
+    "Sernancelhe"
+   ],
+   "notes": "",
+   "subjects": [
+    "vilar"
+   ]
+  },
+  {
+   "id": "poa-albufeira-aguieira",
+   "name": "POA da Albufeira da Aguieira",
+   "kind": "POAAP",
+   "family": "albufeira",
+   "diploma": "RCM n.º 186/2007, de 21 de dezembro",
+   "status": "em vigor",
+   "state": "vigor",
+   "municipalities": [
+    "Mortágua",
+    "Penacova",
+    "Tábua",
+    "Santa Comba Dão"
+   ],
+   "notes": "",
+   "subjects": [
+    "aguieira"
+   ]
+  },
+  {
+   "id": "poa-albufeira-fronhas",
+   "name": "POA da Albufeira de Fronhas",
+   "kind": "POAAP",
+   "family": "albufeira",
+   "diploma": "RCM n.º 37/2009, de 11 de maio",
+   "status": "em vigor",
+   "state": "vigor",
+   "municipalities": [
+    "Arganil",
+    "Vila Nova de Poiares"
+   ],
+   "notes": "",
+   "subjects": [
+    "fronhas"
+   ]
+  },
+  {
+   "id": "poa-acude-gameiro",
+   "name": "POA do Açude do Gameiro",
+   "kind": "POAAP",
+   "family": "albufeira",
+   "diploma": "Despacho conjunto de 17 de agosto de 1993; revisão determinada pelo Despacho n.º 10071/2010, de 15 de junho",
+   "status": "em vigor (revision never completed)",
+   "state": "vigor",
+   "municipalities": [
+    "Mora"
+   ],
+   "notes": "",
+   "subjects": [
+    "gameiro"
+   ]
+  },
+  {
+   "id": "poa-albufeira-apartadura",
+   "name": "POA da Albufeira da Apartadura",
+   "kind": "POAAP",
+   "family": "albufeira",
+   "diploma": "RCM n.º 188/2003, de 15 de dezembro; alterada pelo Despacho n.º 6799/2012, de 18 de maio",
+   "status": "em vigor",
+   "state": "vigor",
+   "municipalities": [
+    "Marvão"
+   ],
+   "notes": "",
+   "subjects": [
+    "apartadura"
+   ]
+  },
+  {
+   "id": "poa-albufeiras-cabril-bouca-santa-luzia",
+   "name": "POA das Albufeiras do Cabril, Bouçã e Santa Luzia",
+   "kind": "POAAP",
+   "family": "albufeira",
+   "diploma": "RCM n.º 45/2002, de 13 de março; alterada pela RCM n.º 80/2012, de 1 de outubro",
+   "status": "em vigor",
+   "state": "vigor",
+   "municipalities": [
+    "Oleiros",
+    "Pedrógão Grande",
+    "Sertã",
+    "Pampilhosa da Serra",
+    "Góis",
+    "Figueiró dos Vinhos"
+   ],
+   "notes": "One plan, three Zêzere/Unhais albufeiras. Figueiró dos Vinhos borders the Bouçã albufeira although the DGT srup_albufeiras attribute omits it — verify with plan boundary.",
+   "subjects": [
+    "cabril",
+    "bouca",
+    "santa luzia"
+   ]
+  },
+  {
+   "id": "poacb-plano-ordenamento-albufeira-castelo-bode",
+   "name": "POACB — Plano de Ordenamento da Albufeira de Castelo do Bode",
+   "kind": "POAAP",
+   "family": "albufeira",
+   "diploma": "RCM n.º 69/2003, de 10 de maio",
+   "status": "em vigor; PEACB (programa especial) em elaboração (Despachos n.º 5797/2018, 11957/2018, 2229/2024, 6314/2025 — prazo prorrogado até 2026/27)",
+   "state": "vigor",
+   "municipalities": [
+    "Tomar",
+    "Abrantes",
+    "Sardoal",
+    "Vila de Rei",
+    "Ferreira do Zêzere",
+    "Sertã",
+    "Figueiró dos Vinhos"
+   ],
+   "notes": "Mai–jun 2026: RCM (reportada como n.º 113/2026) ratificou disposições do PDM de Abrantes incompatíveis com o POACB — estatuto em Abrantes parcialmente alterado; confirmar no DR.",
+   "subjects": [
+    "castelo bode"
+   ]
+  },
+  {
+   "id": "poa-albufeira-cova-viriato",
+   "name": "POA da Albufeira da Cova do Viriato",
+   "kind": "POAAP",
+   "family": "albufeira",
+   "diploma": "RCM n.º 42/2004, de 31 de março",
+   "status": "em vigor",
+   "state": "vigor",
+   "municipalities": [
+    "Covilhã"
+   ],
+   "notes": "",
+   "subjects": [
+    "cova viriato"
+   ]
+  },
+  {
+   "id": "poa-albufeira-divor",
+   "name": "POA da Albufeira do Divor",
+   "kind": "POAAP",
+   "family": "albufeira",
+   "diploma": "RCM n.º 115/2005, de 6 de julho",
+   "status": "em vigor",
+   "state": "vigor",
+   "municipalities": [
+    "Arraiolos",
+    "Évora"
+   ],
+   "notes": "",
+   "subjects": [
+    "divor"
+   ]
+  },
+  {
+   "id": "poa-albufeira-idanha-marechal-carmona",
+   "name": "POA da Albufeira da Idanha (Marechal Carmona)",
+   "kind": "POAAP",
+   "family": "albufeira",
+   "diploma": "RCM n.º 170/2008, de 21 de novembro",
+   "status": "em vigor",
+   "state": "vigor",
+   "municipalities": [
+    "Idanha-a-Nova"
+   ],
+   "notes": "",
+   "subjects": [
+    "idanha",
+    "marechal carmona"
+   ]
+  },
+  {
+   "id": "poa-albufeira-magos",
+   "name": "POA da Albufeira de Magos",
+   "kind": "POAAP",
+   "family": "albufeira",
+   "diploma": "RCM n.º 169/2008, de 21 de novembro",
+   "status": "em vigor",
+   "state": "vigor",
+   "municipalities": [
+    "Salvaterra de Magos"
+   ],
+   "notes": "",
+   "subjects": [
+    "magos"
+   ]
+  },
+  {
+   "id": "poa-albufeira-maranhao",
+   "name": "POA da Albufeira do Maranhão",
+   "kind": "POAAP",
+   "family": "albufeira",
+   "diploma": "RCM n.º 117/99, de 6 de outubro",
+   "status": "em vigor",
+   "state": "vigor",
+   "municipalities": [
+    "Avis",
+    "Alter do Chão"
+   ],
+   "notes": "",
+   "subjects": [
+    "maranhao"
+   ]
+  },
+  {
+   "id": "poa-albufeiras-santa-agueda-marateca-pisco",
+   "name": "POA das Albufeiras de Santa Águeda (Marateca) e Pisco",
+   "kind": "POAAP",
+   "family": "albufeira",
+   "diploma": "RCM n.º 107/2005, de 28 de junho",
+   "status": "em vigor",
+   "state": "vigor",
+   "municipalities": [
+    "Castelo Branco",
+    "Fundão"
+   ],
+   "notes": "",
+   "subjects": [
+    "santa agueda",
+    "pisco",
+    "marateca"
+   ]
+  },
+  {
+   "id": "poa-albufeira-montargil",
+   "name": "POA da Albufeira de Montargil",
+   "kind": "POAAP",
+   "family": "albufeira",
+   "diploma": "RCM n.º 94/2002, de 8 de maio",
+   "status": "em vigor; PEAAP com elaboração determinada (Despacho n.º 10567/2025, de 8 de setembro)",
+   "state": "vigor",
+   "municipalities": [
+    "Ponte de Sor",
+    "Avis"
+   ],
+   "notes": "",
+   "subjects": [
+    "montargil"
+   ]
+  },
+  {
+   "id": "poa-albufeira-povoa-meadas",
+   "name": "POA da Albufeira de Póvoa e Meadas",
+   "kind": "POAAP",
+   "family": "albufeira",
+   "diploma": "RCM n.º 37/98, de 9 de março; revisão determinada pelo Despacho n.º 10072/2010, de 15 de junho",
+   "status": "em vigor (revision never completed)",
+   "state": "vigor",
+   "municipalities": [
+    "Castelo de Vide"
+   ],
+   "notes": "Oldest POAAP approved by RCM still in force.",
+   "subjects": [
+    "povoa",
+    "meadas"
+   ]
+  },
+  {
+   "id": "poa-albufeira-sao-domingos",
+   "name": "POA da Albufeira de São Domingos",
+   "kind": "POAAP",
+   "family": "albufeira",
+   "diploma": "RCM n.º 39/2009, de 14 de maio; REVOGADO pela RCM n.º 55/2026, de 18 de março",
+   "status": "revoked (Mar 2026); programa especial had been determined (Despachos n.º 3842/2017 e 11957/2018) but was not concluded — DL 107/2009 statutory regime now applies",
+   "state": "revogado",
+   "municipalities": [
+    "Peniche"
+   ],
+   "notes": "",
+   "subjects": [
+    "sao domingos"
+   ]
+  },
+  {
+   "id": "poaap-plano-ordenamento-albufeiras-alqueva-pedrogao",
+   "name": "POAAP — Plano de Ordenamento das Albufeiras de Alqueva e Pedrógão",
+   "kind": "POAAP",
+   "family": "albufeira",
+   "diploma": "RCM n.º 94/2006, de 4 de agosto; correção material pela Declaração n.º 3-A/2026/1, de 16 de janeiro",
+   "status": "em vigor; being replaced by the PEAAP Alqueva e Pedrógão (elaboração determinada: Despachos n.º 124/2018, 11957/2018 e 10419/2025; APA/EDIA/ATLA protocol signed Jan 2026)",
+   "state": "vigor",
+   "municipalities": [
+    "Alandroal",
+    "Elvas",
+    "Évora",
+    "Moura",
+    "Mourão",
+    "Portel",
+    "Reguengos de Monsaraz",
+    "Serpa",
+    "Vidigueira"
+   ],
+   "notes": "Only POAAP with a 1000 m zona terrestre de proteção (others default to 500 m). The future PEAAP scope adds Vila Viçosa (10 municipalities).",
+   "subjects": [
+    "alqueva",
+    "pedrogao"
+   ]
+  },
+  {
+   "id": "poa-albufeira-alvito",
+   "name": "POA da Albufeira do Alvito",
+   "kind": "POAAP",
+   "family": "albufeira",
+   "diploma": "RCM n.º 151/98, de 26 de dezembro",
+   "status": "em vigor; PEAAP com elaboração determinada (Despacho n.º 10568/2025, de 8 de setembro)",
+   "state": "vigor",
+   "municipalities": [
+    "Portel",
+    "Viana do Alentejo",
+    "Cuba"
+   ],
+   "notes": "Revisão determinada por RCM n.º 106/2005 (nunca concluída).",
+   "subjects": [
+    "alvito"
+   ]
+  },
+  {
+   "id": "poa-albufeira-caia",
+   "name": "POA da Albufeira do Caia",
+   "kind": "POAAP",
+   "family": "albufeira",
+   "diploma": "Despacho conjunto de 13 de julho de 1993",
+   "status": "em vigor; PEAAP com elaboração determinada (Despachos n.º 5446/2017, 11957/2018, 10418/2025)",
+   "state": "vigor",
+   "municipalities": [
+    "Elvas",
+    "Campo Maior",
+    "Arronches"
+   ],
+   "notes": "",
+   "subjects": [
+    "caia"
+   ]
+  },
+  {
+   "id": "poa-albufeira-campilhas",
+   "name": "POA da Albufeira de Campilhas",
+   "kind": "POAAP",
+   "family": "albufeira",
+   "diploma": "RCM n.º 17/2007, de 5 de fevereiro",
+   "status": "em vigor",
+   "state": "vigor",
+   "municipalities": [
+    "Santiago do Cacém"
+   ],
+   "notes": "",
+   "subjects": [
+    "campilhas"
+   ]
+  },
+  {
+   "id": "poa-albufeira-enxoe",
+   "name": "POA da Albufeira do Enxoé",
+   "kind": "POAAP",
+   "family": "albufeira",
+   "diploma": "RCM n.º 167/2006, de 15 de dezembro",
+   "status": "em vigor",
+   "state": "vigor",
+   "municipalities": [
+    "Serpa"
+   ],
+   "notes": "",
+   "subjects": [
+    "enxoe"
+   ]
+  },
+  {
+   "id": "poa-albufeira-fonte-serne",
+   "name": "POA da Albufeira de Fonte Serne",
+   "kind": "POAAP",
+   "family": "albufeira",
+   "diploma": "RCM n.º 15/2007, de 31 de janeiro",
+   "status": "em vigor",
+   "state": "vigor",
+   "municipalities": [
+    "Santiago do Cacém"
+   ],
+   "notes": "",
+   "subjects": [
+    "fonte serne"
+   ]
+  },
+  {
+   "id": "poa-albufeira-monte-rocha",
+   "name": "POA da Albufeira do Monte da Rocha",
+   "kind": "POAAP",
+   "family": "albufeira",
+   "diploma": "RCM n.º 154/2003, de 29 de setembro",
+   "status": "em vigor",
+   "state": "vigor",
+   "municipalities": [
+    "Ourique",
+    "Castro Verde"
+   ],
+   "notes": "",
+   "subjects": [
+    "monte rocha"
+   ]
+  },
+  {
+   "id": "poa-albufeira-monte-novo",
+   "name": "POA da Albufeira do Monte Novo",
+   "kind": "POAAP",
+   "family": "albufeira",
+   "diploma": "RCM n.º 120/2003, de 14 de agosto",
+   "status": "em vigor",
+   "state": "vigor",
+   "municipalities": [
+    "Évora"
+   ],
+   "notes": "",
+   "subjects": [
+    "monte novo"
+   ]
+  },
+  {
+   "id": "poa-albufeira-odivelas",
+   "name": "POA da Albufeira de Odivelas",
+   "kind": "POAAP",
+   "family": "albufeira",
+   "diploma": "RCM n.º 184/2007, de 21 de dezembro",
+   "status": "em vigor",
+   "state": "vigor",
+   "municipalities": [
+    "Ferreira do Alentejo",
+    "Alvito"
+   ],
+   "notes": "",
+   "subjects": [
+    "odivelas"
+   ]
+  },
+  {
+   "id": "poa-albufeira-pego-altar",
+   "name": "POA da Albufeira do Pego do Altar",
+   "kind": "POAAP",
+   "family": "albufeira",
+   "diploma": "RCM n.º 35/2005, de 24 de fevereiro",
+   "status": "em vigor",
+   "state": "vigor",
+   "municipalities": [
+    "Alcácer do Sal",
+    "Viana do Alentejo",
+    "Montemor-o-Novo"
+   ],
+   "notes": "",
+   "subjects": [
+    "pego altar"
+   ]
+  },
+  {
+   "id": "poa-albufeira-roxo",
+   "name": "POA da Albufeira do Roxo",
+   "kind": "POAAP",
+   "family": "albufeira",
+   "diploma": "RCM n.º 36/2009, de 11 de maio",
+   "status": "em vigor",
+   "state": "vigor",
+   "municipalities": [
+    "Aljustrel",
+    "Beja"
+   ],
+   "notes": "",
+   "subjects": [
+    "roxo"
+   ]
+  },
+  {
+   "id": "poa-albufeira-santa-clara",
+   "name": "POA da Albufeira de Santa Clara",
+   "kind": "POAAP",
+   "family": "albufeira",
+   "diploma": "RCM n.º 185/2007, de 21 de dezembro; alterado por RCM n.º 56/2014, de 22 de setembro",
+   "status": "em vigor",
+   "state": "vigor",
+   "municipalities": [
+    "Odemira",
+    "Ourique"
+   ],
+   "notes": "",
+   "subjects": [
+    "santa clara"
+   ]
+  },
+  {
+   "id": "poa-albufeira-tapada-grande",
+   "name": "POA da Albufeira da Tapada Grande",
+   "kind": "POAAP",
+   "family": "albufeira",
+   "diploma": "RCM n.º 114/2005, de 4 de julho",
+   "status": "em vigor",
+   "state": "vigor",
+   "municipalities": [
+    "Mértola"
+   ],
+   "notes": "",
+   "subjects": [
+    "tapada grande"
+   ]
+  },
+  {
+   "id": "poa-albufeira-tapada-pequena",
+   "name": "POA da Albufeira da Tapada Pequena",
+   "kind": "POAAP",
+   "family": "albufeira",
+   "diploma": "RCM n.º 171/2008, de 21 de novembro",
+   "status": "em vigor",
+   "state": "vigor",
+   "municipalities": [
+    "Mértola"
+   ],
+   "notes": "",
+   "subjects": [
+    "tapada pequena"
+   ]
+  },
+  {
+   "id": "poa-albufeira-vale-gaio-trigo-morais",
+   "name": "POA da Albufeira de Vale de Gaio (Trigo de Morais)",
+   "kind": "POAAP",
+   "family": "albufeira",
+   "diploma": "RCM n.º 173/2008, de 21 de novembro",
+   "status": "em vigor",
+   "state": "vigor",
+   "municipalities": [
+    "Alcácer do Sal"
+   ],
+   "notes": "",
+   "subjects": [
+    "vale gaio",
+    "trigo morais"
+   ]
+  },
+  {
+   "id": "poa-albufeira-vigia",
+   "name": "POA da Albufeira da Vigia",
+   "kind": "POAAP",
+   "family": "albufeira",
+   "diploma": "RCM n.º 50/98, de 20 de abril",
+   "status": "em vigor",
+   "state": "vigor",
+   "municipalities": [
+    "Redondo"
+   ],
+   "notes": "",
+   "subjects": [
+    "vigia"
+   ]
+  },
+  {
+   "id": "poa-albufeiras-funcho-arade",
+   "name": "POA das Albufeiras do Funcho e do Arade",
+   "kind": "POAAP",
+   "family": "albufeira",
+   "diploma": "RCM n.º 174/2008, de 21 de novembro",
+   "status": "em vigor",
+   "state": "vigor",
+   "municipalities": [
+    "Silves"
+   ],
+   "notes": "",
+   "subjects": [
+    "funcho",
+    "arade"
+   ]
+  },
+  {
+   "id": "poa-albufeira-bravura-odiaxere",
+   "name": "POA da Albufeira da Bravura (Odiáxere)",
+   "kind": "POAAP",
+   "family": "albufeira",
+   "diploma": "RCM n.º 71/2004, de 12 de junho",
+   "status": "em vigor",
+   "state": "vigor",
+   "municipalities": [
+    "Lagos",
+    "Portimão",
+    "Monchique"
+   ],
+   "notes": "",
+   "subjects": [
+    "bravura",
+    "odiaxere"
+   ]
+  },
+  {
+   "id": "poa-albufeira-odeleite",
+   "name": "POA da Albufeira de Odeleite",
+   "kind": "POAAP",
+   "family": "albufeira",
+   "diploma": "RCM n.º 54/2014, de 4 de setembro",
+   "status": "em vigor",
+   "state": "vigor",
+   "municipalities": [
+    "Castro Marim"
+   ],
+   "notes": "Last POAAP ever approved (Sep 2014), already under the transitional regime of Lei 31/2014.",
+   "subjects": [
+    "odeleite"
+   ]
+  },
+  {
+   "id": "poa-albufeira-odelouca",
+   "name": "POA da Albufeira de Odelouca",
+   "kind": "POAAP",
+   "family": "albufeira",
+   "diploma": "RCM n.º 103/2009, de 25 de setembro",
+   "status": "em vigor",
+   "state": "vigor",
+   "municipalities": [
+    "Silves",
+    "Monchique"
+   ],
+   "notes": "",
+   "subjects": [
+    "odelouca"
+   ]
+  },
+  {
+   "id": "poa-albufeiras-bemposta-picote-miranda-douro-internacion",
+   "name": "POA das Albufeiras de Bemposta, Picote e Miranda (Douro Internacional)",
+   "kind": "POAAP",
+   "family": "albufeira",
+   "diploma": "Elaboração determinada pela RCM n.º 91/2007, de 13 de julho",
+   "status": "never approved — elaboration determined in 2007 but plan never concluded; DL 107/2009 regime applies",
+   "state": "nunca-aprovado",
+   "municipalities": [
+    "Miranda do Douro",
+    "Mogadouro"
+   ],
+   "notes": "",
+   "subjects": [
+    "bemposta",
+    "picote",
+    "miranda"
+   ]
+  },
+  {
+   "id": "poa-albufeiras-valeira-pocinho",
+   "name": "POA das Albufeiras da Valeira e do Pocinho",
+   "kind": "POAAP",
+   "family": "albufeira",
+   "diploma": "Elaboração determinada pela RCM n.º 88/2007, de 11 de julho",
+   "status": "never approved — elaboration determined in 2007 but plan never concluded; DL 107/2009 regime applies",
+   "state": "nunca-aprovado",
+   "municipalities": [
+    "São João da Pesqueira",
+    "Vila Nova de Foz Côa",
+    "Carrazeda de Ansiães",
+    "Torre de Moncorvo",
+    "Freixo de Espada à Cinta",
+    "Figueira de Castelo Rodrigo"
+   ],
+   "notes": "",
+   "subjects": [
+    "valeira",
+    "pocinho"
+   ]
+  },
+  {
+   "id": "poa-albufeira-valtorno",
+   "name": "POA da Albufeira do Valtorno",
+   "kind": "POAAP",
+   "family": "albufeira",
+   "diploma": "Elaboração determinada pelo Despacho n.º 22791/2009, de 15 de outubro",
+   "status": "never approved; DL 107/2009 regime applies",
+   "state": "nunca-aprovado",
+   "municipalities": [
+    "Vila Flor"
+   ],
+   "notes": "",
+   "subjects": [
+    "valtorno"
+   ]
+  },
+  {
+   "id": "peaft-programa-especial-albufeira-foz-tua",
+   "name": "PEAFT — Programa Especial da Albufeira de Foz Tua",
+   "kind": "PEAAP",
+   "family": "albufeira",
+   "diploma": "RCM n.º 112/2026, de 8 de junho",
+   "status": "em vigor (approved 8 June 2026 — the FIRST and so far ONLY albufeira programa especial in force)",
+   "state": "vigor",
+   "municipalities": [
+    "Alijó",
+    "Carrazeda de Ansiães",
+    "Mirandela",
+    "Murça",
+    "Vila Flor"
+   ],
+   "notes": "Elaboração determinada pelo Despacho n.º 8097/2011; zonamento digital em SNIAmb/PAAP.",
+   "subjects": [
+    "foz tua"
+   ]
+  },
+  {
+   "id": "peacb-programa-especial-albufeira-castelo-bode",
+   "name": "PEACB — Programa Especial da Albufeira de Castelo do Bode",
+   "kind": "PEAAP",
+   "family": "albufeira",
+   "diploma": "Elaboração determinada: Despacho n.º 5797/2018; prazos prorrogados por Despachos n.º 11957/2018, 2229/2024 e 6314/2025 (4 de junho)",
+   "status": "em elaboração (will replace POACB when approved)",
+   "state": "elaboracao",
+   "municipalities": [
+    "Tomar",
+    "Abrantes",
+    "Sardoal",
+    "Vila de Rei",
+    "Ferreira do Zêzere",
+    "Sertã",
+    "Figueiró dos Vinhos"
+   ],
+   "notes": "",
+   "subjects": [
+    "castelo bode"
+   ]
+  },
+  {
+   "id": "peaap-programa-especial-albufeiras-alqueva-pedrogao",
+   "name": "PEAAP — Programa Especial das Albufeiras de Alqueva e Pedrógão",
+   "kind": "PEAAP",
+   "family": "albufeira",
+   "diploma": "Elaboração determinada: Despacho n.º 124/2018, renovada pelo Despacho n.º 10419/2025, de 3 de setembro; protocolo APA/EDIA/ATLA assinado em janeiro de 2026",
+   "status": "em elaboração (will replace POAAP Alqueva e Pedrógão)",
+   "state": "elaboracao",
+   "municipalities": [
+    "Alandroal",
+    "Elvas",
+    "Évora",
+    "Moura",
+    "Mourão",
+    "Portel",
+    "Reguengos de Monsaraz",
+    "Serpa",
+    "Vidigueira",
+    "Vila Viçosa"
+   ],
+   "notes": "",
+   "subjects": [
+    "alqueva",
+    "pedrogao"
+   ]
+  },
+  {
+   "id": "programa-especial-albufeira-caia",
+   "name": "Programa Especial da Albufeira do Caia",
+   "kind": "PEAAP",
+   "family": "albufeira",
+   "diploma": "Despacho n.º 5446/2017; renovado pelo Despacho n.º 10418/2025, de 3 de setembro",
+   "status": "em elaboração (will replace POA do Caia)",
+   "state": "elaboracao",
+   "municipalities": [
+    "Elvas",
+    "Campo Maior",
+    "Arronches"
+   ],
+   "notes": "",
+   "subjects": [
+    "caia"
+   ]
+  },
+  {
+   "id": "programa-especial-albufeiras-regua-carrapatelo",
+   "name": "Programa Especial das Albufeiras da Régua e do Carrapatelo",
+   "kind": "PEAAP",
+   "family": "albufeira",
+   "diploma": "Despacho n.º 10200/2017; prorrogações Despachos n.º 2231/2024 e 6315/2025",
+   "status": "em elaboração (will replace POA Régua/Carrapatelo)",
+   "state": "elaboracao",
+   "municipalities": [
+    "Alijó",
+    "Sabrosa",
+    "Lamego",
+    "Tabuaço",
+    "São João da Pesqueira",
+    "Armamar",
+    "Peso da Régua",
+    "Carrazeda de Ansiães",
+    "Baião",
+    "Mesão Frio",
+    "Resende",
+    "Marco de Canaveses",
+    "Cinfães"
+   ],
+   "notes": "",
+   "subjects": [
+    "regua",
+    "carrapatelo"
+   ]
+  },
+  {
+   "id": "programa-especial-albufeira-crestuma-lever",
+   "name": "Programa Especial da Albufeira de Crestuma-Lever",
+   "kind": "PEAAP",
+   "family": "albufeira",
+   "diploma": "Despacho n.º 10201/2017; prorrogações Despachos n.º 2322/2024 e 5678/2025",
+   "status": "em elaboração (will replace POA Crestuma-Lever)",
+   "state": "elaboracao",
+   "municipalities": [
+    "Vila Nova de Gaia",
+    "Gondomar",
+    "Santa Maria da Feira",
+    "Castelo de Paiva",
+    "Penafiel",
+    "Marco de Canaveses",
+    "Cinfães"
+   ],
+   "notes": "",
+   "subjects": [
+    "crestuma lever"
+   ]
+  },
+  {
+   "id": "programa-especial-albufeiras-baixo-sabor-escaloes-montan",
+   "name": "Programa Especial das Albufeiras do Baixo Sabor (escalões de montante e jusante)",
+   "kind": "PEAAP",
+   "family": "albufeira",
+   "diploma": "Despacho n.º 3782/2017; prorrogações Despachos n.º 11957/2018, 2230/2024 e 5677/2025",
+   "status": "em elaboração (first-time program — no prior POAAP)",
+   "state": "elaboracao",
+   "municipalities": [
+    "Torre de Moncorvo",
+    "Alfândega da Fé",
+    "Mogadouro",
+    "Macedo de Cavaleiros"
+   ],
+   "notes": "",
+   "subjects": [
+    "baixo sabor"
+   ]
+  },
+  {
+   "id": "programa-especial-albufeira-canicada",
+   "name": "Programa Especial da Albufeira da Caniçada",
+   "kind": "PEAAP",
+   "family": "albufeira",
+   "diploma": "Despacho n.º 7011/2021, de 15 de julho",
+   "status": "em elaboração (will replace POA da Caniçada) — prosseguimento: Despacho n.º 1369/2026, de 5 de fevereiro",
+   "state": "elaboracao",
+   "municipalities": [
+    "Vieira do Minho",
+    "Terras de Bouro",
+    "Montalegre"
+   ],
+   "notes": "",
+   "subjects": [
+    "canicada"
+   ]
+  },
+  {
+   "id": "programa-especial-albufeira-ermal",
+   "name": "Programa Especial da Albufeira do Ermal",
+   "kind": "PEAAP",
+   "family": "albufeira",
+   "diploma": "Despacho n.º 3843/2017, de 8 de maio",
+   "status": "em elaboração (will replace POA do Ermal)",
+   "state": "elaboracao",
+   "municipalities": [
+    "Vieira do Minho"
+   ],
+   "notes": "",
+   "subjects": [
+    "ermal"
+   ]
+  },
+  {
+   "id": "peare-programa-especial-albufeiras-ribeiradio-ermida",
+   "name": "PEARE — Programa Especial das Albufeiras de Ribeiradio e Ermida",
+   "kind": "PEAAP",
+   "family": "albufeira",
+   "diploma": "Despacho n.º 6969/2017; prorrogação Despacho n.º 9404/2023",
+   "status": "em elaboração (first-time program — no prior POAAP); public consultation ran on participa.pt",
+   "state": "elaboracao",
+   "municipalities": [
+    "Sever do Vouga",
+    "Oliveira de Frades"
+   ],
+   "notes": "Adjacent municipalities (Vouzela, São Pedro do Sul, Águeda) may be touched by the zona terrestre de proteção — confirm with final boundary.",
+   "subjects": [
+    "ribeiradio",
+    "ermida"
+   ]
+  },
+  {
+   "id": "programa-especial-albufeiras-paradela-salamonde-venda-no",
+   "name": "Programa Especial das Albufeiras de Paradela, Salamonde e Venda Nova",
+   "kind": "PEAAP",
+   "family": "albufeira",
+   "diploma": "Despacho n.º 1452/2022, de 4 de fevereiro",
+   "status": "em elaboração (first-time program) — prorrogação Fev 2026 (Despacho n.º 1372/2026)",
+   "state": "elaboracao",
+   "municipalities": [
+    "Montalegre",
+    "Vieira do Minho"
+   ],
+   "notes": "",
+   "subjects": [
+    "paradela",
+    "salamonde",
+    "venda nova"
+   ]
+  },
+  {
+   "id": "programa-especial-albufeira-vilarinho-furnas",
+   "name": "Programa Especial da Albufeira de Vilarinho das Furnas",
+   "kind": "PEAAP",
+   "family": "albufeira",
+   "diploma": "Despacho n.º 11482/2023, de 10 de novembro",
+   "status": "em elaboração (first-time program) — prazo prorrogado 21 meses (Despacho n.º 1371/2026)",
+   "state": "elaboracao",
+   "municipalities": [
+    "Terras de Bouro"
+   ],
+   "notes": "",
+   "subjects": [
+    "vilarinho furnas"
+   ]
+  },
+  {
+   "id": "programa-especial-albufeira-torrao",
+   "name": "Programa Especial da Albufeira do Torrão",
+   "kind": "PEAAP",
+   "family": "albufeira",
+   "diploma": "Despacho n.º 11481/2023, de 10 de novembro",
+   "status": "em elaboração (first-time program) — prazo prorrogado 21 meses (Despacho n.º 1370/2026)",
+   "state": "elaboracao",
+   "municipalities": [
+    "Amarante",
+    "Penafiel",
+    "Marco de Canaveses"
+   ],
+   "notes": "",
+   "subjects": [
+    "torrao"
+   ]
+  },
+  {
+   "id": "programa-especial-albufeira-vilar",
+   "name": "Programa Especial da Albufeira do Vilar",
+   "kind": "PEAAP",
+   "family": "albufeira",
+   "diploma": "Despacho n.º 11483/2023, de 10 de novembro",
+   "status": "elaboração determinada (will replace POA do Vilar)",
+   "state": "elaboracao",
+   "municipalities": [
+    "Moimenta da Beira",
+    "Sernancelhe"
+   ],
+   "notes": "",
+   "subjects": [
+    "vilar"
+   ]
+  },
+  {
+   "id": "programa-especial-albufeira-sao-domingos",
+   "name": "Programa Especial da Albufeira de São Domingos",
+   "kind": "PEAAP",
+   "family": "albufeira",
+   "diploma": "Despacho n.º 3842/2017; Despacho n.º 11957/2018",
+   "status": "elaboração determinada mas não concluída; entretanto o POA de São Domingos foi revogado (RCM 55/2026) — program apparently abandoned, DL 107/2009 applies",
+   "state": "nunca-aprovado",
+   "municipalities": [
+    "Peniche"
+   ],
+   "notes": "",
+   "subjects": [
+    "sao domingos"
+   ]
+  },
+  {
+   "id": "programa-especial-albufeira-montargil",
+   "name": "Programa Especial da Albufeira de Montargil",
+   "kind": "PEAAP",
+   "family": "albufeira",
+   "diploma": "Despacho n.º 10567/2025, de 8 de setembro",
+   "status": "elaboração determinada (will replace POA de Montargil)",
+   "state": "elaboracao",
+   "municipalities": [
+    "Ponte de Sor",
+    "Avis"
+   ],
+   "notes": "",
+   "subjects": [
+    "montargil"
+   ]
+  },
+  {
+   "id": "programa-especial-albufeira-alvito",
+   "name": "Programa Especial da Albufeira do Alvito",
+   "kind": "PEAAP",
+   "family": "albufeira",
+   "diploma": "Despacho n.º 10568/2025, de 8 de setembro",
+   "status": "elaboração determinada (will replace POA do Alvito)",
+   "state": "elaboracao",
+   "municipalities": [
+    "Portel",
+    "Viana do Alentejo",
+    "Cuba"
+   ],
+   "notes": "",
+   "subjects": [
+    "alvito"
+   ]
+  },
+  {
+   "id": "programa-especial-albufeira-alto-rabagao",
+   "name": "Programa Especial da Albufeira do Alto Rabagão",
+   "kind": "PEAAP",
+   "family": "albufeira",
+   "diploma": "Despacho n.º 10417/2025, de 3 de setembro",
+   "status": "elaboração determinada (first-time program)",
+   "state": "elaboracao",
+   "municipalities": [
+    "Montalegre"
+   ],
+   "notes": "",
+   "subjects": [
+    "alto rabagao"
+   ]
+  },
+  {
+   "id": "poa-albufeira-alto-rabagao",
+   "name": "POA da Albufeira do Alto Rabagão",
+   "kind": "POAAP",
+   "family": "albufeira",
+   "diploma": "Elaboração determinada: RCM n.º 141/2002, de 7 de dezembro",
+   "status": "never approved — elaboration determined in 2002 but never concluded; DL 107/2009 regime applies. PEAAP determined in 2025 (Despacho n.º 10417/2025).",
+   "state": "nunca-aprovado",
+   "municipalities": [
+    "Montalegre"
+   ],
+   "notes": "",
+   "subjects": [
+    "alto rabagao"
+   ]
+  },
+  {
+   "id": "pooc-caminha-espinho-plano-ordenamento-orla-costeira-cam",
+   "name": "POOC Caminha-Espinho — Plano de Ordenamento da Orla Costeira Caminha-Espinho",
+   "kind": "POOC",
+   "family": "costa",
+   "diploma": "RCM n.º 25/99, de 7 de abril; alterado/revisto pela RCM n.º 154/2007, de 2 de outubro",
+   "status": "Revoked — replaced by POC Caminha-Espinho (RCM n.º 111/2021)",
+   "state": "revogado",
+   "municipalities": [
+    "Caminha",
+    "Viana do Castelo",
+    "Esposende",
+    "Póvoa de Varzim",
+    "Vila do Conde",
+    "Matosinhos",
+    "Porto",
+    "Vila Nova de Gaia",
+    "Espinho"
+   ],
+   "notes": "One of the original 9 POOCs. Revision into a POC determined by despacho of 2009.",
+   "subjects": [
+    "caminha espinho"
+   ]
+  },
+  {
+   "id": "pooc-ovar-marinha-grande-plano-ordenamento-orla-costeira",
+   "name": "POOC Ovar-Marinha Grande — Plano de Ordenamento da Orla Costeira Ovar-Marinha Grande",
+   "kind": "POOC",
+   "family": "costa",
+   "diploma": "RCM n.º 142/2000, de 20 de outubro",
+   "status": "Revoked — replaced by POC Ovar-Marinha Grande (RCM n.º 112/2017)",
+   "state": "revogado",
+   "municipalities": [
+    "Ovar",
+    "Murtosa",
+    "Aveiro",
+    "Ílhavo",
+    "Vagos",
+    "Mira",
+    "Cantanhede",
+    "Figueira da Foz",
+    "Pombal",
+    "Leiria",
+    "Marinha Grande"
+   ],
+   "notes": "First POOC to be converted into a Programa da Orla Costeira.",
+   "subjects": [
+    "ovar marinha grande"
+   ]
+  },
+  {
+   "id": "pooc-alcobaca-mafra-plano-ordenamento-orla-costeira-alco",
+   "name": "POOC Alcobaça-Mafra — Plano de Ordenamento da Orla Costeira Alcobaça-Mafra",
+   "kind": "POOC",
+   "family": "costa",
+   "diploma": "RCM n.º 11/2002, de 17 de janeiro",
+   "status": "Revoked — replaced by POC Alcobaça-Cabo Espichel (RCM n.º 66/2019)",
+   "state": "revogado",
+   "municipalities": [
+    "Alcobaça",
+    "Nazaré",
+    "Caldas da Rainha",
+    "Óbidos",
+    "Peniche",
+    "Lourinhã",
+    "Torres Vedras",
+    "Mafra"
+   ],
+   "notes": "",
+   "subjects": [
+    "alcobaca mafra"
+   ]
+  },
+  {
+   "id": "pooc-cidadela-forte-sao-juliao-barra-plano-ordenamento-o",
+   "name": "POOC Cidadela-Forte de São Julião da Barra — Plano de Ordenamento da Orla Costeira Cidadela-São Julião da Barra",
+   "kind": "POOC",
+   "family": "costa",
+   "diploma": "RCM n.º 123/98, de 19 de outubro; alterado pelas RCM n.º 82/2012 e RCM n.º 64/2016, de 19 de outubro",
+   "status": "Revoked — replaced by POC Alcobaça-Cabo Espichel (RCM n.º 66/2019)",
+   "state": "revogado",
+   "municipalities": [
+    "Cascais",
+    "Oeiras"
+   ],
+   "notes": "Shortest POOC (Cascais bay marginal, Cidadela to Forte de S. Julião da Barra).",
+   "subjects": [
+    "cidadela sao juliao barra"
+   ]
+  },
+  {
+   "id": "pooc-sintra-sado-plano-ordenamento-orla-costeira-sintra",
+   "name": "POOC Sintra-Sado — Plano de Ordenamento da Orla Costeira Sintra-Sado",
+   "kind": "POOC",
+   "family": "costa",
+   "diploma": "RCM n.º 86/2003, de 25 de junho",
+   "status": "Revoked in two steps: area north of Cabo Espichel by POC Alcobaça-Cabo Espichel (RCM 66/2019); Espichel-Sado section by POC Espichel-Odeceixe (RCM 87-A/2022). Fully out of force since October 2022.",
+   "state": "revogado",
+   "municipalities": [
+    "Sintra",
+    "Cascais",
+    "Almada",
+    "Sesimbra",
+    "Setúbal"
+   ],
+   "notes": "Its area was split between two POC troços at Cabo Espichel.",
+   "subjects": [
+    "sintra sado"
+   ]
+  },
+  {
+   "id": "pooc-sado-sines-plano-ordenamento-orla-costeira-sado-sin",
+   "name": "POOC Sado-Sines — Plano de Ordenamento da Orla Costeira Sado-Sines",
+   "kind": "POOC",
+   "family": "costa",
+   "diploma": "RCM n.º 136/99, de 29 de outubro",
+   "status": "Revoked — replaced by POC Espichel-Odeceixe (RCM n.º 87-A/2022)",
+   "state": "revogado",
+   "municipalities": [
+    "Grândola",
+    "Santiago do Cacém",
+    "Sines"
+   ],
+   "notes": "Covered the Tróia-Sines arc.",
+   "subjects": [
+    "sado sines"
+   ]
+  },
+  {
+   "id": "pooc-sines-burgau-plano-ordenamento-orla-costeira-sines",
+   "name": "POOC Sines-Burgau — Plano de Ordenamento da Orla Costeira Sines-Burgau",
+   "kind": "POOC",
+   "family": "costa",
+   "diploma": "RCM n.º 152/98, de 30 de dezembro",
+   "status": "PARTIALLY in force: the Sines-Odeceixe section was replaced by POC Espichel-Odeceixe (RCM 87-A/2022); the Odeceixe-Burgau section remains in force until the POC Odeceixe-Vilamoura is approved (still in elaboration as of mid-2026).",
+   "state": "parcial",
+   "municipalities": [
+    "Sines",
+    "Odemira",
+    "Aljezur",
+    "Vila do Bispo"
+   ],
+   "notes": "IMPORTANT overlap for pdm: this entire stretch lies inside the Parque Natural do Sudoeste Alentejano e Costa Vicentina — the POPNSACV (RCM n.º 11-B/2011, de 4 de fevereiro) applies concurrently; municipal PDMs transpose both regimes.",
+   "subjects": [
+    "sines burgau"
+   ]
+  },
+  {
+   "id": "pooc-burgau-vilamoura-plano-ordenamento-orla-costeira-bu",
+   "name": "POOC Burgau-Vilamoura — Plano de Ordenamento da Orla Costeira Burgau-Vilamoura",
+   "kind": "POOC",
+   "family": "costa",
+   "diploma": "RCM n.º 33/99, de 27 de abril",
+   "status": "STILL IN FORCE (em vigor) — will be replaced by POC Odeceixe-Vilamoura, which is still in elaboration as of mid-2026",
+   "state": "vigor",
+   "municipalities": [
+    "Vila do Bispo",
+    "Lagos",
+    "Portimão",
+    "Lagoa",
+    "Silves",
+    "Albufeira",
+    "Loulé"
+   ],
+   "notes": "One of only two POOCs still fully in force.",
+   "subjects": [
+    "burgau vilamoura"
+   ]
+  },
+  {
+   "id": "pooc-vilamoura-vila-real-santo-antonio-plano-ordenamento",
+   "name": "POOC Vilamoura-Vila Real de Santo António — Plano de Ordenamento da Orla Costeira Vilamoura-Vila Real de Santo António",
+   "kind": "POOC",
+   "family": "costa",
+   "diploma": "RCM n.º 103/2005, de 27 de junho; 1.ª alteração pela RCM n.º 65/2016, de 19 de outubro (regulamento arts. 3, 4, 23, 55, 58-61, 67-77, 93, 95 + planta síntese)",
+   "status": "STILL IN FORCE (em vigor) — replacement POC-VVRSA has not effectively started (PCGT: 'a aguardar atribuição')",
+   "state": "vigor",
+   "municipalities": [
+    "Loulé",
+    "Faro",
+    "Olhão",
+    "Tavira",
+    "Castro Marim",
+    "Vila Real de Santo António"
+   ],
+   "notes": "Covers the Ria Formosa barrier-island coast; overlaps the Parque Natural da Ria Formosa special plan (POPNRF).",
+   "subjects": [
+    "vilamoura vila real santo antonio"
+   ]
+  },
+  {
+   "id": "poc-ce-programa-orla-costeira-caminha-espinho",
+   "name": "POC-CE — Programa da Orla Costeira Caminha-Espinho",
+   "kind": "POC",
+   "family": "costa",
+   "diploma": "RCM n.º 111/2021, de 11 de agosto",
+   "status": "Em vigor (in force). Revokes POOC Caminha-Espinho (RCM 25/99 + RCM 154/2007).",
+   "state": "vigor",
+   "municipalities": [
+    "Caminha",
+    "Viana do Castelo",
+    "Esposende",
+    "Póvoa de Varzim",
+    "Vila do Conde",
+    "Matosinhos",
+    "Porto",
+    "Vila Nova de Gaia",
+    "Espinho"
+   ],
+   "notes": "122 km of coast, 9 municipalities, 36 freguesias. As a 'programa' it binds public entities; its faixas de salvaguarda and beach regulations were transposed into PDMs (e.g. PDM Caminha alteration, Aviso 22303/2021).",
+   "subjects": [
+    "caminha espinho"
+   ]
+  },
+  {
+   "id": "poc-omg-programa-orla-costeira-ovar-marinha-grande",
+   "name": "POC-OMG — Programa da Orla Costeira Ovar-Marinha Grande",
+   "kind": "POC",
+   "family": "costa",
+   "diploma": "RCM n.º 112/2017, de 10 de agosto; Regulamento de Gestão das Praias Marítimas: Aviso n.º 11506/2017, de 29 de setembro; updated by Despacho n.º 4034/2024, de 12 de abril",
+   "status": "Em vigor (in force). Revokes POOC Ovar-Marinha Grande (RCM 142/2000). First POC approved.",
+   "state": "vigor",
+   "municipalities": [
+    "Espinho",
+    "Ovar",
+    "Murtosa",
+    "Aveiro",
+    "Ílhavo",
+    "Vagos",
+    "Mira",
+    "Cantanhede",
+    "Figueira da Foz",
+    "Pombal",
+    "Leiria",
+    "Marinha Grande"
+   ],
+   "notes": "",
+   "subjects": [
+    "ovar marinha grande"
+   ]
+  },
+  {
+   "id": "poc-ace-programa-orla-costeira-alcobaca-cabo-espichel",
+   "name": "POC-ACE — Programa da Orla Costeira Alcobaça-Cabo Espichel",
+   "kind": "POC",
+   "family": "costa",
+   "diploma": "RCM n.º 66/2019, de 11 de abril; Regulamento de Gestão das Praias: Aviso n.º 12492/2019, de 6 de agosto",
+   "status": "Em vigor (in force). Revokes POOC Alcobaça-Mafra, POOC Cidadela-S. Julião da Barra, and POOC Sintra-Sado in the POC-ACE area.",
+   "state": "vigor",
+   "municipalities": [
+    "Alcobaça",
+    "Nazaré",
+    "Caldas da Rainha",
+    "Óbidos",
+    "Peniche",
+    "Lourinhã",
+    "Torres Vedras",
+    "Mafra",
+    "Sintra",
+    "Cascais",
+    "Almada",
+    "Sesimbra"
+   ],
+   "notes": "224 km across 12 municipalities. The Tejo estuary margin (Oeiras/Lisboa) is outside POC scope — it awaits the never-approved Tejo estuary program.",
+   "subjects": [
+    "alcobaca cabo espichel"
+   ]
+  },
+  {
+   "id": "poc-eo-programa-orla-costeira-espichel-odeceixe",
+   "name": "POC-EO — Programa da Orla Costeira Espichel-Odeceixe",
+   "kind": "POC",
+   "family": "costa",
+   "diploma": "RCM n.º 87-A/2022, de 4 de outubro; retificada pela Declaração de Retificação n.º 26/2022, de 17 de outubro; Regulamento de Gestão das Praias: Aviso n.º 23368/2022, de 12 de dezembro",
+   "status": "Em vigor (in force). Revises/replaces POOC Sintra-Sado (Espichel-Sado section), POOC Sado-Sines (whole), and POOC Sines-Burgau (Sines-Odeceixe section).",
+   "state": "vigor",
+   "municipalities": [
+    "Sesimbra",
+    "Setúbal",
+    "Grândola",
+    "Santiago do Cacém",
+    "Sines",
+    "Odemira"
+   ],
+   "notes": "~476 km², 220 km of coast, 15 freguesias. Overlaps PNSACV between Porto Covo and Odeceixe, where POPNSACV (RCM 11-B/2011) also applies.",
+   "subjects": [
+    "espichel odeceixe"
+   ]
+  },
+  {
+   "id": "poc-ov-programa-orla-costeira-odeceixe-vilamoura",
+   "name": "POC-OV — Programa da Orla Costeira Odeceixe-Vilamoura",
+   "kind": "POC",
+   "family": "costa",
+   "diploma": "Not approved. Elaboration resumed by Despacho n.º 9316/2019, de 3 de outubro (SEOT/Conservação da Natureza); earlier proposal had public discussion 7 jun–19 jul 2016",
+   "status": "Em elaboração (in elaboration, NOT in force) as of mid-2026 — PCGT phase 'determinação do início', no public-discussion or approval dates set. Until approved, POOC Sines-Burgau (Odeceixe-Burgau section), POOC Burgau-Vilamoura and POPNSACV remain the applicable regimes.",
+   "state": "elaboracao",
+   "municipalities": [
+    "Aljezur",
+    "Vila do Bispo",
+    "Lagos",
+    "Portimão",
+    "Lagoa",
+    "Silves",
+    "Albufeira",
+    "Loulé"
+   ],
+   "notes": "~509 km², 210 km of coast. Will merge POOC Sines-Burgau (Odeceixe-Burgau) + POOC Burgau-Vilamoura. Status can change — CCDR Algarve/AMAL announced a 'retoma'; re-check PCGT before shipping.",
+   "subjects": [
+    "odeceixe vilamoura"
+   ]
+  },
+  {
+   "id": "poc-vvrsa-programa-orla-costeira-vilamoura-vila-real-san",
+   "name": "POC-VVRSA — Programa da Orla Costeira Vilamoura-Vila Real de Santo António",
+   "kind": "POC",
+   "family": "costa",
+   "diploma": "Not approved. Elaboration determined by Despacho n.º 3841/2017, de 8 de maio",
+   "status": "Not started substantively — PCGT phase 'a aguardar atribuição' (awaiting assignment) as of mid-2026. POOC Vilamoura-VRSA (RCM 103/2005, alt. RCM 65/2016) remains in force.",
+   "state": "elaboracao",
+   "municipalities": [
+    "Loulé",
+    "Faro",
+    "Olhão",
+    "Tavira",
+    "Castro Marim",
+    "Vila Real de Santo António"
+   ],
+   "notes": "",
+   "subjects": [
+    "vilamoura vila real santo antonio"
+   ]
+  },
+  {
+   "id": "poe-tejo-plano-ordenamento-estuario-tejo",
+   "name": "POE Tejo — Plano de Ordenamento do Estuário do Tejo",
+   "kind": "POE",
+   "family": "estuario",
+   "diploma": "Never approved. Elaboration determined by Despacho n.º 21020/2009, de 18 de setembro (competence to ARH do Tejo), under Decreto-Lei n.º 129/2008, de 21 de julho (regime dos planos de ordenamento dos estuários)",
+   "status": "NOT in force — only a preliminary proposal was ever produced; no approving RCM exists. Under Lei 31/2014/DL 80/2015 it would now be elaborated as a 'programa de estuário' (APA lists it as planned).",
+   "state": "nunca-aprovado",
+   "municipalities": [
+    "Lisboa",
+    "Oeiras",
+    "Loures",
+    "Vila Franca de Xira",
+    "Alcochete",
+    "Montijo",
+    "Moita",
+    "Barreiro",
+    "Seixal",
+    "Almada",
+    "Benavente"
+   ],
+   "notes": "For pdm: do NOT model any POE as an active constraint layer.",
+   "subjects": [
+    "estuario tejo"
+   ]
+  },
+  {
+   "id": "poe-douro-plano-ordenamento-estuario-douro",
+   "name": "POE Douro — Plano de Ordenamento do Estuário do Douro",
+   "kind": "POE",
+   "family": "estuario",
+   "diploma": "Never approved. Elaboration determined 2008/2009 under DL 129/2008; technical proposal advanced by ARH do Norte but no approving diploma was ever published in the DRE",
+   "status": "NOT in force. APA now lists a future 'Programa de Estuário' for the Douro; nothing approved as of mid-2026. (APA's own page is ambiguous — documents/studies exist, but there is no approving RCM.)",
+   "state": "nunca-aprovado",
+   "municipalities": [
+    "Porto",
+    "Vila Nova de Gaia",
+    "Gondomar"
+   ],
+   "notes": "",
+   "subjects": [
+    "estuario douro"
+   ]
+  },
+  {
+   "id": "poe-vouga-plano-programa-ordenamento-estuario-vouga",
+   "name": "POE Vouga — Plano/Programa de Ordenamento do Estuário do Vouga",
+   "kind": "POE",
+   "family": "estuario",
+   "diploma": "None — never formally elaborated or approved",
+   "status": "NOT in force; listed by APA only as a planned future 'Programa de Estuário' (Vouga/Ria de Aveiro)",
+   "state": "nunca-aprovado",
+   "municipalities": [
+    "Aveiro",
+    "Ílhavo",
+    "Murtosa",
+    "Estarreja",
+    "Ovar",
+    "Vagos",
+    "Albergaria-a-Velha"
+   ],
+   "notes": "APA's planned estuary-program list is Douro, Mondego, Vouga, Tejo — the Mondego is also planned and equally unapproved. Zero estuary plans/programs are in force in Portugal.",
+   "subjects": [
+    "estuario vouga"
+   ]
+  },
+  {
+   "id": "poe-mondego-programa-ordenamento-estuario-mondego",
+   "name": "POE Mondego — Programa de Ordenamento do Estuário do Mondego",
+   "kind": "POE",
+   "family": "estuario",
+   "diploma": "",
+   "status": "NOT in force — on APA’s planned estuary-programs list; never approved.",
+   "state": "nunca-aprovado",
+   "municipalities": [
+    "Figueira da Foz",
+    "Montemor-o-Velho"
+   ],
+   "notes": "",
+   "subjects": [
+    "estuario mondego"
+   ]
+  },
+  {
+   "id": "pocmad-programa-para-orla-costeira-madeira",
+   "name": "POCMAD — Programa para a Orla Costeira da Madeira",
+   "kind": "POC",
+   "family": "costa",
+   "diploma": "RCG Regional n.º 48/2024, de 2 de fevereiro; Modelo Territorial alterado mar 2026",
+   "status": "em vigor",
+   "state": "vigor",
+   "municipalities": [
+    "Calheta (Madeira)",
+    "Ponta do Sol",
+    "Ribeira Brava",
+    "Câmara de Lobos",
+    "Funchal",
+    "Santa Cruz",
+    "Machico",
+    "Santana",
+    "São Vicente",
+    "Porto Moniz"
+   ],
+   "notes": "",
+   "subjects": [
+    "madeira"
+   ]
+  },
+  {
+   "id": "pooc-costa-norte-ilha-sao-miguel",
+   "name": "POOC Costa Norte da Ilha de São Miguel",
+   "kind": "POOC",
+   "family": "costa",
+   "diploma": "DRR n.º 6/2005/A",
+   "status": "em vigor",
+   "state": "vigor",
+   "municipalities": [
+    "Ponta Delgada",
+    "Ribeira Grande",
+    "Nordeste"
+   ],
+   "notes": "",
+   "subjects": [
+    "costa norte ilha sao miguel"
+   ]
+  },
+  {
+   "id": "pooc-costa-sul-ilha-sao-miguel",
+   "name": "POOC Costa Sul da Ilha de São Miguel",
+   "kind": "POOC",
+   "family": "costa",
+   "diploma": "DRR n.º 29/2007/A",
+   "status": "em vigor",
+   "state": "vigor",
+   "municipalities": [
+    "Ponta Delgada",
+    "Lagoa (Açores)",
+    "Vila Franca do Campo",
+    "Povoação",
+    "Nordeste"
+   ],
+   "notes": "",
+   "subjects": [
+    "costa sul ilha sao miguel"
+   ]
+  },
+  {
+   "id": "pooc-ilha-terceira",
+   "name": "POOC Ilha Terceira",
+   "kind": "POOC",
+   "family": "costa",
+   "diploma": "DRR n.º 1/2005/A, substituído por DRR n.º 30/2023/A",
+   "status": "em vigor",
+   "state": "vigor",
+   "municipalities": [
+    "Angra do Heroísmo",
+    "Praia da Vitória"
+   ],
+   "notes": "",
+   "subjects": [
+    "ilha terceira"
+   ]
+  },
+  {
+   "id": "pooc-ilha-santa-maria",
+   "name": "POOC Ilha de Santa Maria",
+   "kind": "POOC",
+   "family": "costa",
+   "diploma": "(diploma não verificado)",
+   "status": "em vigor",
+   "state": "vigor",
+   "municipalities": [
+    "Vila do Porto"
+   ],
+   "notes": "",
+   "subjects": [
+    "ilha santa maria"
+   ]
+  },
+  {
+   "id": "pooc-ilha-graciosa",
+   "name": "POOC Ilha Graciosa",
+   "kind": "POOC",
+   "family": "costa",
+   "diploma": "DRR n.º 13/2008/A",
+   "status": "em vigor",
+   "state": "vigor",
+   "municipalities": [
+    "Santa Cruz da Graciosa"
+   ],
+   "notes": "",
+   "subjects": [
+    "ilha graciosa"
+   ]
+  },
+  {
+   "id": "pooc-ilha-sao-jorge",
+   "name": "POOC Ilha de São Jorge",
+   "kind": "POOC",
+   "family": "costa",
+   "diploma": "DRR n.º 24/2005/A, alterado por DRR n.º 2/2022/A",
+   "status": "em vigor",
+   "state": "vigor",
+   "municipalities": [
+    "Velas",
+    "Calheta de São Jorge"
+   ],
+   "notes": "",
+   "subjects": [
+    "ilha sao jorge"
+   ]
+  },
+  {
+   "id": "pooc-ilha-pico",
+   "name": "POOC Ilha do Pico",
+   "kind": "POOC",
+   "family": "costa",
+   "diploma": "DRR n.º 24/2011/A",
+   "status": "em vigor",
+   "state": "vigor",
+   "municipalities": [
+    "Madalena",
+    "São Roque do Pico",
+    "Lajes do Pico"
+   ],
+   "notes": "",
+   "subjects": [
+    "ilha pico"
+   ]
+  },
+  {
+   "id": "pooc-ilha-faial",
+   "name": "POOC Ilha do Faial",
+   "kind": "POOC",
+   "family": "costa",
+   "diploma": "DRR n.º 19/2012/A",
+   "status": "em vigor",
+   "state": "vigor",
+   "municipalities": [
+    "Horta"
+   ],
+   "notes": "",
+   "subjects": [
+    "ilha faial"
+   ]
+  },
+  {
+   "id": "pooc-ilha-flores",
+   "name": "POOC Ilha das Flores",
+   "kind": "POOC",
+   "family": "costa",
+   "diploma": "DRR n.º 24/2008/A",
+   "status": "em vigor",
+   "state": "vigor",
+   "municipalities": [
+    "Santa Cruz das Flores",
+    "Lajes das Flores"
+   ],
+   "notes": "",
+   "subjects": [
+    "ilha flores"
+   ]
+  },
+  {
+   "id": "pooc-ilha-corvo",
+   "name": "POOC Ilha do Corvo",
+   "kind": "POOC",
+   "family": "costa",
+   "diploma": "DRR n.º 14/2008/A",
+   "status": "em vigor",
+   "state": "vigor",
+   "municipalities": [
+    "Corvo"
+   ],
+   "notes": "",
+   "subjects": [
+    "ilha corvo"
+   ]
+  },
+  {
+   "id": "popnpg-plano-ordenamento-parque-nacional-peneda-geres",
+   "name": "POPNPG — Plano de Ordenamento do Parque Nacional da Peneda-Gerês",
+   "kind": "POAP",
+   "family": "area-protegida",
+   "diploma": "RCM n.º 11-A/2011, de 4 de fevereiro (revised the earlier plan approved by RCM n.º 134/95, de 11 de novembro)",
+   "status": "em vigor; being replaced by the PEPNPG (Programa Especial). Public discussion ran 4 Sep–15 Oct 2024; final version / ponderação report was in preparation, completion expected 2025 — NOT yet approved as of mid-2026",
+   "state": "vigor",
+   "municipalities": [
+    "Arcos de Valdevez",
+    "Melgaço",
+    "Montalegre",
+    "Ponte da Barca",
+    "Terras de Bouro"
+   ],
+   "notes": "Only national park in mainland Portugal.",
+   "subjects": [
+    "peneda geres"
+   ]
+  },
+  {
+   "id": "popnsacv-plano-ordenamento-parque-natural-sudoeste-alent",
+   "name": "POPNSACV — Plano de Ordenamento do Parque Natural do Sudoeste Alentejano e Costa Vicentina",
+   "kind": "POAP",
+   "family": "area-protegida",
+   "diploma": "RCM n.º 11-B/2011, de 4 de fevereiro",
+   "status": "em vigor; conversion to PEPNSACV underway (Phase II, preliminary proposal)",
+   "state": "vigor",
+   "municipalities": [
+    "Sines",
+    "Odemira",
+    "Aljezur",
+    "Vila do Bispo"
+   ],
+   "notes": "Coastal park spanning Alentejo and Algarve; the 'Costa Vicentina' plan referenced in the task.",
+   "subjects": [
+    "sudoeste alentejano costa vicentina"
+   ]
+  },
+  {
+   "id": "popnse-plano-ordenamento-parque-natural-serra-estrela",
+   "name": "POPNSE — Plano de Ordenamento do Parque Natural da Serra da Estrela",
+   "kind": "POAP",
+   "family": "area-protegida",
+   "diploma": "RCM n.º 83/2009, de 9 de setembro",
+   "status": "em vigor; excluído do lote de conversão de 2023 (incêndios de 2022) — coberto pelo Programa de Revitalização do PNSE (RCM n.º 40/2024); elaboração de PEPNSE determinada em separado (Despacho n.º 8124/2023).",
+   "state": "vigor",
+   "municipalities": [
+    "Manteigas",
+    "Celorico da Beira",
+    "Covilhã",
+    "Gouveia",
+    "Guarda",
+    "Seia"
+   ],
+   "notes": "The one POAP dropped from the 20-plan conversion programme.",
+   "subjects": [
+    "serra estrela"
+   ]
+  },
+  {
+   "id": "popnal-plano-ordenamento-parque-natural-alvao",
+   "name": "POPNAL — Plano de Ordenamento do Parque Natural do Alvão",
+   "kind": "POAP",
+   "family": "area-protegida",
+   "diploma": "RCM n.º 62/2008, de 7 de abril (elaboration determined by RCM n.º 85/2004)",
+   "status": "em vigor; conversion to PEPNAL underway",
+   "state": "vigor",
+   "municipalities": [
+    "Mondim de Basto",
+    "Vila Real"
+   ],
+   "notes": "",
+   "subjects": [
+    "alvao"
+   ]
+  },
+  {
+   "id": "popnm-plano-ordenamento-parque-natural-montesinho",
+   "name": "POPNM — Plano de Ordenamento do Parque Natural de Montesinho",
+   "kind": "POAP",
+   "family": "area-protegida",
+   "diploma": "RCM n.º 179/2008, de 24 de novembro",
+   "status": "em vigor; conversion to PEPNM underway",
+   "state": "vigor",
+   "municipalities": [
+    "Bragança",
+    "Vinhais"
+   ],
+   "notes": "",
+   "subjects": [
+    "montesinho"
+   ]
+  },
+  {
+   "id": "popndi-plano-ordenamento-parque-natural-douro-internacio",
+   "name": "POPNDI — Plano de Ordenamento do Parque Natural do Douro Internacional",
+   "kind": "POAP",
+   "family": "area-protegida",
+   "diploma": "RCM n.º 120/2005, de 28 de julho",
+   "status": "em vigor; conversion to PEPNDI underway",
+   "state": "vigor",
+   "municipalities": [
+    "Miranda do Douro",
+    "Mogadouro",
+    "Freixo de Espada à Cinta",
+    "Figueira de Castelo Rodrigo"
+   ],
+   "notes": "",
+   "subjects": [
+    "douro internacional"
+   ]
+  },
+  {
+   "id": "popnti-plano-ordenamento-parque-natural-tejo-internacion",
+   "name": "POPNTI — Plano de Ordenamento do Parque Natural do Tejo Internacional",
+   "kind": "POAP",
+   "family": "area-protegida",
+   "diploma": "RCM n.º 176/2008, de 24 de novembro",
+   "status": "em vigor; PEPNTI was reported (Aug 2025) as about to go to public discussion — among the more advanced conversions but not yet approved as of mid-2026",
+   "state": "vigor",
+   "municipalities": [
+    "Castelo Branco",
+    "Idanha-a-Nova",
+    "Vila Velha de Ródão"
+   ],
+   "notes": "",
+   "subjects": [
+    "tejo internacional"
+   ]
+  },
+  {
+   "id": "popnssm-plano-ordenamento-parque-natural-serra-sao-mamed",
+   "name": "POPNSSM — Plano de Ordenamento do Parque Natural da Serra de São Mamede",
+   "kind": "POAP",
+   "family": "area-protegida",
+   "diploma": "RCM n.º 77/2005, de 21 de março",
+   "status": "em vigor; conversion to PEPNSSM underway",
+   "state": "vigor",
+   "municipalities": [
+    "Castelo de Vide",
+    "Marvão",
+    "Portalegre",
+    "Arronches",
+    "Monforte"
+   ],
+   "notes": "Monforte pode não integrar a área de intervenção (RCM 77/2005) — verificar plantas oficiais.",
+   "subjects": [
+    "serra sao mamede"
+   ]
+  },
+  {
+   "id": "popnsc-plano-ordenamento-parque-natural-sintra-cascais",
+   "name": "POPNSC — Plano de Ordenamento do Parque Natural de Sintra-Cascais",
+   "kind": "POAP",
+   "family": "area-protegida",
+   "diploma": "RCM n.º 1-A/2004, de 8 de janeiro (revision of the earlier plan)",
+   "status": "em vigor; conversion to PEPNSC underway",
+   "state": "vigor",
+   "municipalities": [
+    "Sintra",
+    "Cascais"
+   ],
+   "notes": "",
+   "subjects": [
+    "sintra cascais"
+   ]
+  },
+  {
+   "id": "popnarr-plano-ordenamento-parque-natural-arrabida",
+   "name": "POPNArr — Plano de Ordenamento do Parque Natural da Arrábida",
+   "kind": "POAP",
+   "family": "area-protegida",
+   "diploma": "RCM n.º 141/2005, de 23 de agosto",
+   "status": "em vigor; conversion to PEPNArr underway",
+   "state": "vigor",
+   "municipalities": [
+    "Palmela",
+    "Sesimbra",
+    "Setúbal"
+   ],
+   "notes": "",
+   "subjects": [
+    "arrabida"
+   ]
+  },
+  {
+   "id": "popnrf-plano-ordenamento-parque-natural-ria-formosa",
+   "name": "POPNRF — Plano de Ordenamento do Parque Natural da Ria Formosa",
+   "kind": "POAP",
+   "family": "area-protegida",
+   "diploma": "RCM n.º 78/2009, de 2 de setembro",
+   "status": "em vigor; conversion to PEPNRF underway",
+   "state": "vigor",
+   "municipalities": [
+    "Loulé",
+    "Faro",
+    "Olhão",
+    "Tavira",
+    "Vila Real de Santo António"
+   ],
+   "notes": "",
+   "subjects": [
+    "ria formosa"
+   ]
+  },
+  {
+   "id": "popnvg-plano-ordenamento-parque-natural-vale-guadiana",
+   "name": "POPNVG — Plano de Ordenamento do Parque Natural do Vale do Guadiana",
+   "kind": "POAP",
+   "family": "area-protegida",
+   "diploma": "RCM n.º 161/2004, de 10 de novembro",
+   "status": "em vigor; conversion to PEPNVG underway",
+   "state": "vigor",
+   "municipalities": [
+    "Mértola",
+    "Serpa"
+   ],
+   "notes": "",
+   "subjects": [
+    "vale guadiana"
+   ]
+  },
+  {
+   "id": "popnln-plano-ordenamento-parque-natural-litoral-norte",
+   "name": "POPNLN — Plano de Ordenamento do Parque Natural do Litoral Norte",
+   "kind": "POAP",
+   "family": "area-protegida",
+   "diploma": "RCM n.º 175/2008, de 24 de novembro",
+   "status": "em vigor; the PEPNLN is the MOST advanced conversion — public discussion 30 Mar–15 May 2023, reported (Aug 2025) as 'awaiting approval and publication'. Verify DR for an approving RCM in late 2025/2026.",
+   "state": "vigor",
+   "municipalities": [
+    "Esposende"
+   ],
+   "notes": "Likely the next PEAP to be published after PNSAC.",
+   "subjects": [
+    "litoral norte"
+   ]
+  },
+  {
+   "id": "pepnsac-programa-especial-parque-natural-serras-aire-can",
+   "name": "PEPNSAC — Programa Especial do Parque Natural das Serras de Aire e Candeeiros (replacing POPNSAC)",
+   "kind": "PEAP",
+   "family": "area-protegida",
+   "diploma": "RCM n.º 104/2023, de 1 de setembro (approved the updated limits + the Programa Especial + Regulamento de Gestão); accompanied by DL n.º 76/2023 amending the park's founding regime (first change to DL n.º 118/79 in 44 years)",
+   "status": "em vigor since 2 September 2023 — the ONLY Programa Especial de Área Protegida approved to date; its content is to be transposed into the relevant PDMs",
+   "state": "vigor",
+   "municipalities": [
+    "Alcobaça",
+    "Porto de Mós",
+    "Alcanena",
+    "Ourém",
+    "Rio Maior",
+    "Santarém",
+    "Torres Novas"
+   ],
+   "notes": "The reference case for the whole POAP→PEAP transition. Park area ~38,400 ha.",
+   "subjects": [
+    "serras aire candeeiros"
+   ]
+  },
+  {
+   "id": "pornpa-plano-ordenamento-reserva-natural-paul-arzila",
+   "name": "PORNPA — Plano de Ordenamento da Reserva Natural do Paul de Arzila",
+   "kind": "POAP",
+   "family": "area-protegida",
+   "diploma": "RCM n.º 75/2004, de 19 de junho",
+   "status": "em vigor; conversion to PERNPA underway",
+   "state": "vigor",
+   "municipalities": [
+    "Coimbra",
+    "Condeixa-a-Nova",
+    "Montemor-o-Velho"
+   ],
+   "notes": "",
+   "subjects": [
+    "paul arzila"
+   ]
+  },
+  {
+   "id": "pornpb-plano-ordenamento-reserva-natural-paul-boquilobo",
+   "name": "PORNPB — Plano de Ordenamento da Reserva Natural do Paul do Boquilobo",
+   "kind": "POAP",
+   "family": "area-protegida",
+   "diploma": "RCM n.º 50/2008, de 19 de março",
+   "status": "em vigor; was suspended for 2 years by RCM n.º 102/2009 for the Linha do Norte railway modernisation (km 88–Entroncamento). Conversion to PERNPB underway.",
+   "state": "vigor",
+   "municipalities": [
+    "Golegã",
+    "Torres Novas"
+   ],
+   "notes": "",
+   "subjects": [
+    "paul boquilobo"
+   ]
+  },
+  {
+   "id": "pornlsas-plano-ordenamento-reserva-natural-lagoas-santo",
+   "name": "PORNLSAS — Plano de Ordenamento da Reserva Natural das Lagoas de Santo André e da Sancha",
+   "kind": "POAP",
+   "family": "area-protegida",
+   "diploma": "RCM n.º 117/2007, de 23 de agosto",
+   "status": "em vigor; conversion to PERNLSAS underway",
+   "state": "vigor",
+   "municipalities": [
+    "Santiago do Cacém",
+    "Sines"
+   ],
+   "notes": "Reserve ~5,247 ha (incl. ~2,137 ha marine).",
+   "subjects": [
+    "lagoas santo andre sancha"
+   ]
+  },
+  {
+   "id": "pornsm-plano-ordenamento-reserva-natural-serra-malcata",
+   "name": "PORNSM — Plano de Ordenamento da Reserva Natural da Serra da Malcata",
+   "kind": "POAP",
+   "family": "area-protegida",
+   "diploma": "RCM n.º 80/2005, de 29 de março (elaboration determined by RCM n.º 48/2001)",
+   "status": "em vigor; conversion to PERNSM underway (was among those not yet started as of 2022)",
+   "state": "vigor",
+   "municipalities": [
+    "Sabugal",
+    "Penamacor"
+   ],
+   "notes": "Note: a separate Programa de Reordenamento e Gestão da Paisagem da Serra da Malcata (PRGP) also exists (DGT paisagem programme) — different instrument.",
+   "subjects": [
+    "serra malcata"
+   ]
+  },
+  {
+   "id": "pornb-plano-ordenamento-reserva-natural-berlengas",
+   "name": "PORNB — Plano de Ordenamento da Reserva Natural das Berlengas",
+   "kind": "POAP",
+   "family": "area-protegida",
+   "diploma": "RCM n.º 180/2008, de 24 de novembro",
+   "status": "em vigor; recondução/conversion to PERNB adjudicated (work started Oct 2023)",
+   "state": "vigor",
+   "municipalities": [
+    "Peniche"
+   ],
+   "notes": "",
+   "subjects": [
+    "berlengas"
+   ]
+  },
+  {
+   "id": "porndsj-plano-ordenamento-reserva-natural-dunas-sao-jaci",
+   "name": "PORNDSJ — Plano de Ordenamento da Reserva Natural das Dunas de São Jacinto",
+   "kind": "POAP",
+   "family": "area-protegida",
+   "diploma": "RCM n.º 76/2005, de 21 de março",
+   "status": "em vigor; conversion to PERNDSJ underway",
+   "state": "vigor",
+   "municipalities": [
+    "Aveiro"
+   ],
+   "notes": "Inside the ZPE/ZEC Ria de Aveiro (Rede Natura 2000).",
+   "subjects": [
+    "dunas sao jacinto"
+   ]
+  },
+  {
+   "id": "pornes-plano-ordenamento-reserva-natural-estuario-sado",
+   "name": "PORNES — Plano de Ordenamento da Reserva Natural do Estuário do Sado",
+   "kind": "POAP",
+   "family": "area-protegida",
+   "diploma": "RCM n.º 182/2008, de 24 de novembro (elaboration determined by RCM n.º 150/2006)",
+   "status": "em vigor; conversion to PERNES underway",
+   "state": "vigor",
+   "municipalities": [
+    "Setúbal",
+    "Palmela",
+    "Alcácer do Sal",
+    "Grândola"
+   ],
+   "notes": "",
+   "subjects": [
+    "estuario sado"
+   ]
+  },
+  {
+   "id": "pornet-plano-ordenamento-reserva-natural-estuario-tejo",
+   "name": "PORNET — Plano de Ordenamento da Reserva Natural do Estuário do Tejo",
+   "kind": "POAP",
+   "family": "area-protegida",
+   "diploma": "RCM n.º 177/2008, de 24 de novembro (elaboration determined by RCM n.º 155/2006)",
+   "status": "em vigor; conversion to PERNET underway",
+   "state": "vigor",
+   "municipalities": [
+    "Alcochete",
+    "Benavente",
+    "Vila Franca de Xira",
+    "Montijo"
+   ],
+   "notes": "",
+   "subjects": [
+    "estuario tejo"
+   ]
+  },
+  {
+   "id": "pornscmvrsa-plano-ordenamento-reserva-natural-sapal-cast",
+   "name": "PORNSCMVRSA — Plano de Ordenamento da Reserva Natural do Sapal de Castro Marim e Vila Real de Santo António",
+   "kind": "POAP",
+   "family": "area-protegida",
+   "diploma": "RCM n.º 181/2008, de 24 de novembro",
+   "status": "em vigor; conversion to PERNSCMVRSA underway",
+   "state": "vigor",
+   "municipalities": [
+    "Castro Marim",
+    "Vila Real de Santo António"
+   ],
+   "notes": "",
+   "subjects": [
+    "sapal castro marim vila real santo antonio"
+   ]
+  },
+  {
+   "id": "poppafcc-plano-ordenamento-gestao-paisagem-protegida-arr",
+   "name": "POPPAFCC — Plano de Ordenamento (e Gestão) da Paisagem Protegida da Arriba Fóssil da Costa da Caparica",
+   "kind": "POAP",
+   "family": "area-protegida",
+   "diploma": "RCM n.º 178/2008, de 24 de novembro",
+   "status": "em vigor; conversion to PEPPAFCC underway",
+   "state": "vigor",
+   "municipalities": [
+    "Almada",
+    "Sesimbra"
+   ],
+   "notes": "Confirm the precise RCM number/date against DR; it is one of the eight 24-Nov-2008 resolutions.",
+   "subjects": [
+    "arriba fossil costa caparica"
+   ]
+  },
+  {
+   "id": "poppsa-plano-ordenamento-paisagem-protegida-serra-acor",
+   "name": "POPPSA — Plano de Ordenamento da Paisagem Protegida da Serra do Açor",
+   "kind": "POAP",
+   "family": "area-protegida",
+   "diploma": "RCM n.º 183/2008, de 24 de novembro",
+   "status": "em vigor; conversion to PEPPSA underway",
+   "state": "vigor",
+   "municipalities": [
+    "Arganil",
+    "Pampilhosa da Serra"
+   ],
+   "notes": "",
+   "subjects": [
+    "serra acor"
+   ]
+  }
+ ]
+}

@@ -6,7 +6,15 @@
 //
 // Usage:
 //
-//	go run ./cmd/pdmdata            # regenerate everything into ./data
+//	go run ./cmd/pdmdata                                   # regenerate everything into ./data
+//	go run ./cmd/pdmdata <target>                          # regenerate a single Tomar-pilot layer
+//	go run ./cmd/pdmdata regulamento <dtcc> <pdf-url> <ref>  # fetch+parse one municipality's regulamento
+//
+// The `regulamento <dtcc> <url> <ref>` form is the nationwide path: it parses a
+// single municipality's PDM written regulation from its Diário da República PDF
+// into data/regulamentos/<dtcc>.json and upserts the coverage manifest
+// data/regulamentos/index.json. It is what the fetch-regulamentos skill drives,
+// one batch of municipalities at a time.
 //
 // This is a maintainer tool; it is not part of the shipped `pdm` binary.
 package main
@@ -22,6 +30,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 
@@ -46,6 +55,15 @@ func main() {
 func run() error {
 	stamp := time.Now().UTC().Format(time.RFC3339)
 
+	// Nationwide path: `regulamento <dtcc> <pdf-url> <reference>` parses one
+	// municipality's regulamento and upserts the coverage manifest.
+	if len(os.Args) > 1 && os.Args[1] == "regulamento" {
+		if len(os.Args) != 5 {
+			return fmt.Errorf("usage: pdmdata regulamento <dtcc> <pdf-url> <reference>")
+		}
+		return buildRegulamentoFor(os.Args[2], os.Args[3], os.Args[4], stamp)
+	}
+
 	// Optional: `go run ./cmd/pdmdata <target>` regenerates a single layer.
 	only := ""
 	if len(os.Args) > 1 {
@@ -60,7 +78,7 @@ func run() error {
 		{"ran", buildRAN},
 		{"ren", buildREN},
 		{"poacb", buildPOACB},
-		{"regulamento", buildRegulamento},
+		{"regulamento", buildTomarRegulamento},
 	}
 	for _, t := range targets {
 		if only != "" && only != t.name {
@@ -78,9 +96,11 @@ func run() error {
 // ---- targets ----
 
 func buildMunicipalities(stamp string) error {
+	// All mainland municipalities. The DGT OGC API carries CAOP Continente only;
+	// the autonomous regions publish through their own regional services. Small
+	// pages: full-detail CAOP boundaries run ~0.5 MB per municipality.
 	u := ogcBase + "/municipios/items?" + url.Values{
-		"bbox":  {"-8.95,39.30,-8.00,39.95"},
-		"limit": {"200"},
+		"limit": {"20"},
 		"f":     {"json"},
 	}.Encode()
 	feats, err := fetchOGC(u)
@@ -95,7 +115,7 @@ func buildMunicipalities(stamp string) error {
 	return writeFC("data/municipalities.geojson", out, source{
 		Name: "DGT — CAOP (Carta Administrativa Oficial de Portugal), municípios",
 		URL:  ogcBase + "/municipios", Service: "OGC API Features",
-		RetrievedAt: stamp, Note: "Region subset; boundaries simplified (~30m) for municipality resolution.",
+		RetrievedAt: stamp, Note: "All mainland municipalities (CAOP Continente); boundaries simplified (~30m) for municipality resolution.",
 	})
 }
 
@@ -207,8 +227,6 @@ func buildPOACB(stamp string) error {
 
 // ---- regulamento (PDM written regulation) ----
 
-const regPDFURL = "https://files.dre.pt/2s/2022/01/016000000/0032700390.pdf"
-
 var (
 	reArtigo = regexp.MustCompile(`^Artigo\s+(\d+)\.º`)
 	reSeccao = regexp.MustCompile(`^(SUBSECÇÃO|SUB-SECÇÃO|SECÇÃO)\b`)
@@ -223,8 +241,27 @@ type regArticle struct {
 	Text    string `json:"text"`
 }
 
-func buildRegulamento(stamp string) error {
-	pdf, err := get(regPDFURL)
+// buildTomarRegulamento regenerates Tomar's regulamento via the shared path
+// (kept so the full `go run ./cmd/pdmdata` regen still covers dtcc 1418).
+func buildTomarRegulamento(stamp string) error {
+	return buildRegulamentoFor(
+		"1418",
+		"https://files.dre.pt/2s/2022/01/016000000/0032700390.pdf",
+		"Aviso n.º 1510/2022, DR 2.ª série, n.º 16, de 2022-01-24",
+		stamp,
+	)
+}
+
+// buildRegulamentoFor fetches a municipality's regulamento PDF, parses it into
+// articles, writes data/regulamentos/<dtcc>.json, and upserts the coverage
+// manifest. A short parse (<50 articles) is a warning, not a hard failure: some
+// small municipalities genuinely have brief regulamentos, and others need a
+// parser tweak — either way the skill spot-checks the output before committing.
+func buildRegulamentoFor(dtcc, pdfURL, reference, stamp string) error {
+	if dtcc == "" || pdfURL == "" || reference == "" {
+		return fmt.Errorf("dtcc, pdf-url and reference are all required")
+	}
+	pdf, err := get(pdfURL)
 	if err != nil {
 		return err
 	}
@@ -233,27 +270,100 @@ func buildRegulamento(stamp string) error {
 		return fmt.Errorf("pdftotext (install poppler): %w", err)
 	}
 	articles := parseArticles(txt)
+	if len(articles) == 0 {
+		return fmt.Errorf("parsed 0 articles from %s — wrong PDF or the parser needs a new heading pattern", pdfURL)
+	}
 	if len(articles) < 50 {
-		return fmt.Errorf("parsed only %d articles — regulamento format may have changed", len(articles))
+		fmt.Printf("    WARNING: parsed only %d articles — spot-check the output; the PDF layout may need a parser tweak\n", len(articles))
 	}
 	doc := map[string]any{
 		"_source": source{
-			Name: "PDM de Tomar — Regulamento (Aviso n.º 1510/2022, DR 2.ª série n.º 16)",
-			URL:  regPDFURL, Service: "Diário da República (PDF → text)",
+			Name: "PDM — Regulamento (" + reference + ")",
+			URL:  pdfURL, Service: "Diário da República (PDF → text)",
 			RetrievedAt: stamp, Note: "Articles parsed from the official regulamento; section context preserved.",
 		},
-		"reference": "Aviso n.º 1510/2022, DR 2.ª série, n.º 16, de 2022-01-24",
+		"reference": reference,
 		"articles":  articles,
 	}
 	b, err := json.Marshal(doc)
 	if err != nil {
 		return err
 	}
-	if err := os.WriteFile("data/tomar/regulamento.json", b, 0o644); err != nil {
+	outPath := filepath.Join("data", "regulamentos", dtcc+".json")
+	if err := os.MkdirAll(filepath.Dir(outPath), 0o755); err != nil {
 		return err
 	}
-	info, _ := os.Stat("data/tomar/regulamento.json")
-	fmt.Printf("    wrote data/tomar/regulamento.json (%d articles, %.2f MB)\n", len(articles), float64(info.Size())/(1<<20))
+	if err := os.WriteFile(outPath, b, 0o644); err != nil {
+		return err
+	}
+	info, _ := os.Stat(outPath)
+	fmt.Printf("    wrote %s (%d articles, %.2f MB)\n", outPath, len(articles), float64(info.Size())/(1<<20))
+	return upsertRegIndex(dtcc, pdfURL, reference, stamp, len(articles))
+}
+
+// upsertRegIndex writes/refreshes the municipality's row in the coverage
+// manifest data/regulamentos/index.json, preserving other rows and any manually
+// curated fields (municipality name, status, alteracoes) on an existing row.
+func upsertRegIndex(dtcc, pdfURL, reference, stamp string, articleCount int) error {
+	const idxPath = "data/regulamentos/index.json"
+	type row struct {
+		DTCC         string   `json:"dtcc"`
+		Municipality string   `json:"municipality"`
+		Reference    string   `json:"reference"`
+		URL          string   `json:"url"`
+		RetrievedAt  string   `json:"retrieved_at"`
+		ArticleCount int      `json:"article_count"`
+		Status       string   `json:"status"`
+		Alteracoes   []string `json:"alteracoes"`
+	}
+	type manifest struct {
+		Note           string `json:"_note,omitempty"`
+		Municipalities []row  `json:"municipalities"`
+	}
+	var m manifest
+	if b, err := os.ReadFile(idxPath); err == nil {
+		if err := json.Unmarshal(b, &m); err != nil {
+			return fmt.Errorf("parse %s: %w", idxPath, err)
+		}
+	}
+	if m.Note == "" {
+		m.Note = "Coverage manifest for bundled PDM regulamentos. One row per municipality with a parsed regulamento in data/regulamentos/<dtcc>.json. Maintained by the fetch-regulamentos skill."
+	}
+	found := false
+	for i := range m.Municipalities {
+		if m.Municipalities[i].DTCC == dtcc {
+			m.Municipalities[i].Reference = reference
+			m.Municipalities[i].URL = pdfURL
+			m.Municipalities[i].RetrievedAt = stamp
+			m.Municipalities[i].ArticleCount = articleCount
+			if m.Municipalities[i].Status == "" {
+				m.Municipalities[i].Status = "in-force"
+			}
+			if m.Municipalities[i].Alteracoes == nil {
+				m.Municipalities[i].Alteracoes = []string{}
+			}
+			found = true
+			break
+		}
+	}
+	if !found {
+		m.Municipalities = append(m.Municipalities, row{
+			DTCC: dtcc, Reference: reference, URL: pdfURL, RetrievedAt: stamp,
+			ArticleCount: articleCount, Status: "in-force", Alteracoes: []string{},
+		})
+	}
+	sort.Slice(m.Municipalities, func(i, j int) bool { return m.Municipalities[i].DTCC < m.Municipalities[j].DTCC })
+	var buf strings.Builder
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false) // keep "<dtcc>" and "&" readable in the manifest
+	enc.SetIndent("", "  ")
+	if err := enc.Encode(m); err != nil {
+		return err
+	}
+	if err := os.WriteFile(idxPath, []byte(buf.String()), 0o644); err != nil {
+		return err
+	}
+	fmt.Printf("    upserted %s (dtcc %s)\n", idxPath, dtcc)
 	return nil
 }
 
@@ -475,7 +585,25 @@ func fetchArcGIS(layerURL string) ([]json.RawMessage, error) {
 	return all, nil
 }
 
+// get fetches a URL, retrying with backoff: the public geoservices are slow to
+// first byte when cold and intermittently answer 502 mid-pagination.
 func get(u string) ([]byte, error) {
+	var lastErr error
+	for attempt := 0; attempt < 5; attempt++ {
+		if attempt > 0 {
+			time.Sleep(time.Duration(5*attempt*attempt) * time.Second) // 5s,20s,45s,80s
+			fmt.Printf("    (retrying %d/4)\n", attempt)
+		}
+		body, err := getOnce(u)
+		if err == nil {
+			return body, nil
+		}
+		lastErr = err
+	}
+	return nil, lastErr
+}
+
+func getOnce(u string) ([]byte, error) {
 	req, err := http.NewRequest(http.MethodGet, u, nil)
 	if err != nil {
 		return nil, fmt.Errorf("bad URL %q: %w", u, err)

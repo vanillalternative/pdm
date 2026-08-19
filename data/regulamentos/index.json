@@ -1,0 +1,15 @@
+{
+  "_note": "Coverage manifest for bundled PDM regulamentos. One row per municipality with a parsed regulamento in data/regulamentos/<dtcc>.json. Maintained by the fetch-regulamentos skill.",
+  "municipalities": [
+    {
+      "dtcc": "1418",
+      "municipality": "Tomar",
+      "reference": "Aviso n.º 1510/2022, DR 2.ª série, n.º 16, de 2022-01-24",
+      "url": "https://files.dre.pt/2s/2022/01/016000000/0032700390.pdf",
+      "retrieved_at": "2026-07-07T14:14:53Z",
+      "article_count": 103,
+      "status": "in-force",
+      "alteracoes": []
+    }
+  ]
+}

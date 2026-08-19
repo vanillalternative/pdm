@@ -6,16 +6,20 @@ package cli
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/bernardosimoes/pdm/data"
 	"github.com/bernardosimoes/pdm/internal/admin"
 	"github.com/bernardosimoes/pdm/internal/cache"
+	"github.com/bernardosimoes/pdm/internal/mapview"
+	"github.com/bernardosimoes/pdm/internal/planos"
 	"github.com/bernardosimoes/pdm/internal/query"
 	"github.com/bernardosimoes/pdm/internal/registry"
 	"github.com/bernardosimoes/pdm/internal/report"
@@ -34,12 +38,15 @@ USAGE:
   pdm point <lat> <lon>           query a coordinate
   pdm polygon <file.geojson>      query a parcel polygon
   pdm report <file.geojson|lat lon> [--format ...]   full report
-  pdm supported                   list supported municipalities
+  pdm supported                   show municipality coverage/support levels
+  pdm municipalities              list every municipality as JSON (name, code,
+                                  district, centroid, bbox, regulamento, plans)
   pdm version                     print version
   pdm help                        show this help
 
 OPTIONS:
-  --format <text|json|markdown|html>   output format (default: text)
+  --format <text|json|markdown|html|ndjson>   output format (default: text);
+                                  ndjson streams events as sources resolve
   --live                          fetch from official geoservices (falls back to bundled)
   --no-cache                      do not read/write the local cache
   --cache-dir <dir>               override the cache directory
@@ -88,11 +95,9 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stdout, "pdm %s\n", Version)
 		return 0
 	case "supported":
-		fmt.Fprintf(stdout, "Supported municipalities:\n")
-		for _, m := range registry.Supported() {
-			fmt.Fprintf(stdout, "  - %s\n", m)
-		}
-		return 0
+		return runSupported(stdout, stderr)
+	case "municipalities":
+		return runMunicipalities(stdout, stderr)
 	case "point":
 		return runPoint(rest, opts, stdout, stderr)
 	case "polygon":
@@ -122,6 +127,146 @@ func runInferred(positionals []string, opts options, stdout, stderr io.Writer) i
 	return 2
 }
 
+func runSupported(stdout, stderr io.Writer) int {
+	count := 0
+	if resolver, err := admin.NewResolver(data.Municipalities); err == nil {
+		count = resolver.Count()
+	}
+	fmt.Fprintf(stdout, "Fully integrated municipalities (bundled layers + parsed regulation):\n")
+	for _, m := range registry.Supported() {
+		fmt.Fprintf(stdout, "  - %s\n", m)
+	}
+	fmt.Fprintf(stdout, "\nEvery other mainland municipality (%d total in CAOP) is supported for:\n", count)
+	fmt.Fprintf(stdout, "  - zoning: national DGT CRUS dataset, queried live (cached locally);\n")
+	fmt.Fprintf(stdout, "  - constraints: RAN and REN (DGT/SNIT SRUP), Rede Natura 2000 (ZEC/ZPE),\n")
+	fmt.Fprintf(stdout, "    áreas protegidas, albufeiras classificadas and coastal plans/programs\n")
+	fmt.Fprintf(stdout, "    (POC/POOC/POAAP/PAAP via APA/SNIAmb), probed live server-side;\n")
+	fmt.Fprintf(stdout, "  - special instruments: a bundled registry of %d planos/programas especiais\n", planos.Count())
+	fmt.Fprintf(stdout, "    (albufeiras, orla costeira, estuários, áreas protegidas) per municipality.\n")
+	fmt.Fprintf(stdout, "  The parsed written regulation (Regulamento) remains per-municipality work.\n")
+	fmt.Fprintf(stdout, "\nKnown national data gaps (reported as \"unknown\", never as \"no\"):\n")
+	fmt.Fprintf(stdout, "  ~50 municipalities lack their REN delimitation in SNIT and 6 lack a\n")
+	fmt.Fprintf(stdout, "  published RAN; Lisboa, Porto and Amadora genuinely have no RAN.\n")
+	fmt.Fprintf(stdout, "\nAzores and Madeira are not yet covered (regional services pending).\n")
+	return 0
+}
+
+// muniDoc is the JSON document emitted by `pdm municipalities`. Its shape is a
+// contract consumed by server.js — keep the field names stable.
+type muniDoc struct {
+	Count          int         `json:"count"`
+	Municipalities []muniEntry `json:"municipalities"`
+}
+
+type muniEntry struct {
+	Name         string            `json:"name"`
+	Code         string            `json:"code"`
+	District     string            `json:"district"`
+	Centroid     muniCentroid      `json:"centroid"`
+	BBox         [4]float64        `json:"bbox"` // minLon, minLat, maxLon, maxLat
+	Regulamento  *muniRegulamento  `json:"regulamento"`
+	SpecialPlans []muniSpecialPlan `json:"special_plans"`
+}
+
+type muniCentroid struct {
+	Lat float64 `json:"lat"`
+	Lon float64 `json:"lon"`
+}
+
+type muniRegulamento struct {
+	Reference string `json:"reference"`
+	URL       string `json:"url"`
+	Articles  int    `json:"articles"`
+	Status    string `json:"status"`
+}
+
+type muniSpecialPlan struct {
+	Name    string `json:"name"`
+	Kind    string `json:"kind"`
+	State   string `json:"state"`
+	Diploma string `json:"diploma"`
+}
+
+// runMunicipalities emits every municipality in the CAOP boundary dataset as a
+// single JSON document, joining three bundled sources: administrative
+// boundaries (name/code/district/centroid/bbox), the parsed-regulamento
+// coverage manifest (keyed by dtcc), and the special-plans registry (by name).
+func runMunicipalities(stdout, stderr io.Writer) int {
+	resolver, err := admin.NewResolver(data.Municipalities)
+	if err != nil {
+		fmt.Fprintf(stderr, "error: load administrative boundaries: %v\n", err)
+		return 1
+	}
+	regByCode := loadRegulamentoIndex()
+
+	list := resolver.List()
+	doc := muniDoc{Count: len(list), Municipalities: make([]muniEntry, 0, len(list))}
+	for _, m := range list {
+		entry := muniEntry{
+			Name:         m.Name,
+			Code:         m.Code,
+			District:     m.District,
+			Centroid:     muniCentroid{Lat: m.CentroidLat, Lon: m.CentroidLon},
+			BBox:         m.BBox,
+			SpecialPlans: []muniSpecialPlan{},
+		}
+		if r, ok := regByCode[m.Code]; ok {
+			r := r
+			entry.Regulamento = &r
+		}
+		for _, ins := range planos.ForMunicipality(m.Name) {
+			entry.SpecialPlans = append(entry.SpecialPlans, muniSpecialPlan{
+				Name:    ins.Name,
+				Kind:    ins.Kind,
+				State:   ins.State,
+				Diploma: ins.Diploma,
+			})
+		}
+		doc.Municipalities = append(doc.Municipalities, entry)
+	}
+
+	enc := json.NewEncoder(stdout)
+	enc.SetEscapeHTML(false)
+	enc.SetIndent("", "  ")
+	if err := enc.Encode(doc); err != nil {
+		fmt.Fprintf(stderr, "error: encoding municipalities: %v\n", err)
+		return 1
+	}
+	return 0
+}
+
+// loadRegulamentoIndex reads the bundled regulamentos coverage manifest and
+// returns it keyed by dtcc. A missing or unparsable manifest yields an empty
+// map (every municipality then reports a null regulamento).
+func loadRegulamentoIndex() map[string]muniRegulamento {
+	out := map[string]muniRegulamento{}
+	b, err := data.Regulamentos.ReadFile("regulamentos/index.json")
+	if err != nil {
+		return out
+	}
+	var idx struct {
+		Municipalities []struct {
+			DTCC         string `json:"dtcc"`
+			Reference    string `json:"reference"`
+			URL          string `json:"url"`
+			ArticleCount int    `json:"article_count"`
+			Status       string `json:"status"`
+		} `json:"municipalities"`
+	}
+	if err := json.Unmarshal(b, &idx); err != nil {
+		return out
+	}
+	for _, m := range idx.Municipalities {
+		out[m.DTCC] = muniRegulamento{
+			Reference: m.Reference,
+			URL:       m.URL,
+			Articles:  m.ArticleCount,
+			Status:    m.Status,
+		}
+	}
+	return out
+}
+
 func runPoint(args []string, opts options, stdout, stderr io.Writer) int {
 	if len(args) < 2 {
 		fmt.Fprintf(stderr, "error: point needs <lat> <lon>\n")
@@ -146,8 +291,17 @@ func runPoint(args []string, opts options, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "error: %v\n", err)
 		return 1
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	// Generous timeout: municipalities without bundled data fetch zoning and
+	// national constraints live from the DGT/APA geoservices, which are slow when
+	// cold and periodically overloaded. The budget must cover a few time-boxed
+	// retries per layer (see perAttemptTimeout) so a transient hang isn't fatal.
+	ctx, cancel := context.WithTimeout(context.Background(), 150*time.Second)
 	defer cancel()
+	if opts.format == report.FormatNDJSON {
+		return streamReport(stdout, stderr,
+			func(emit query.Emit) (any, error) { return eng.PointStream(ctx, lon, lat, emit) },
+			nil) // PointStream reuses its zoning geometry to emit the locator map.
+	}
 	res, err := eng.Point(ctx, lon, lat)
 	if err != nil {
 		fmt.Fprintf(stderr, "error: %v\n", err)
@@ -198,8 +352,17 @@ func runPolygon(args []string, opts options, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "error: %v\n", err)
 		return 1
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 150*time.Second)
 	defer cancel()
+	if opts.format == report.FormatNDJSON {
+		return streamReport(stdout, stderr,
+			func(emit query.Emit) (any, error) { return eng.PolygonStream(ctx, g, emit) },
+			func() *mapview.Data {
+				mapCtx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+				defer cancel()
+				return eng.PolygonMap(mapCtx, g)
+			})
+	}
 	res, err := eng.Polygon(ctx, g)
 	if err != nil {
 		fmt.Fprintf(stderr, "error: %v\n", err)
@@ -220,6 +383,55 @@ func runPolygon(args []string, opts options, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "error: %v\n", err)
 		return 1
 	}
+	return 0
+}
+
+// emitter writes NDJSON events: one compact JSON object per line, mutex-guarded
+// because layer events are emitted from concurrent evaluation goroutines.
+type emitter struct {
+	mu  sync.Mutex
+	enc *json.Encoder
+}
+
+func newEmitter(w io.Writer) *emitter {
+	enc := json.NewEncoder(w)
+	enc.SetEscapeHTML(false)
+	return &emitter{enc: enc}
+}
+
+func (e *emitter) emit(v any) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	_ = e.enc.Encode(v) // Encode appends the newline
+}
+
+// streamReport runs a query in NDJSON streaming mode: the engine emits meta and
+// per-layer events as they complete, the locator map is generated concurrently,
+// and the complete result is the terminal event — so one process yields what
+// previously took separate json and html runs.
+func streamReport(stdout, stderr io.Writer, run func(query.Emit) (any, error), buildMap func() *mapview.Data) int {
+	em := newEmitter(stdout)
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		if buildMap == nil {
+			return
+		}
+		if m := buildMap(); m != nil {
+			if svg := m.SVG(); svg != "" {
+				em.emit(query.MapEvent{Event: "map", HTML: svg})
+			}
+		}
+	}()
+	res, err := run(em.emit)
+	wg.Wait() // the terminal event must be last
+	if err != nil {
+		em.emit(query.ErrorEvent{Event: "error", Error: err.Error()})
+		fmt.Fprintf(stderr, "error: %v\n", err)
+		return 1
+	}
+	em.emit(query.ResultEvent{Event: "result", Data: res})
 	return 0
 }
 
@@ -253,6 +465,20 @@ func buildEngine(opts options) (*query.Engine, error) {
 		return nil, fmt.Errorf("init cache: %w", err)
 	}
 	so := source.Options{Live: opts.live, Cache: c}
+	if s := strings.TrimSpace(os.Getenv("PDM_FETCH_TIMEOUT_SECONDS")); s != "" {
+		seconds, err := strconv.ParseFloat(s, 64)
+		if err != nil || seconds <= 0 {
+			return nil, fmt.Errorf("invalid PDM_FETCH_TIMEOUT_SECONDS %q", s)
+		}
+		so.AttemptTimeout = time.Duration(seconds * float64(time.Second))
+	}
+	if s := strings.TrimSpace(os.Getenv("PDM_FETCH_MAX_ATTEMPTS")); s != "" {
+		attempts, err := strconv.Atoi(s)
+		if err != nil || attempts <= 0 {
+			return nil, fmt.Errorf("invalid PDM_FETCH_MAX_ATTEMPTS %q", s)
+		}
+		so.MaxAttempts = attempts
+	}
 	return query.New(resolver, so), nil
 }
 

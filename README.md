@@ -30,9 +30,48 @@ Câmara (RJUE) — automated data gets you most of the way, never the certificat
 
 ## Status
 
-Pilot municipality: **Tomar** (concelho 1418). Any other municipality is detected
-and reported as *"detected but not yet supported"* — the architecture is
-per-municipality adapters, so adding one is a small, contained change.
+**All mainland municipalities are supported for zoning.** Any coordinate/parcel
+in continental Portugal resolves to its municipality (bundled CAOP boundaries)
+and gets its zoning from the national **DGT CRUS** dataset — the harmonised
+carta of every municipality's plans in force — fetched live (bbox-filtered) and
+cached.
+
+**All mainland municipalities also get the national constraint layers**,
+evaluated as server-side presence probes (the underlying polygons — whole-
+municipality REN delimitations, whole-park boundaries — are far too large to
+download per query, so the services are asked what intersects the subject and
+only attributes come back):
+
+- **RAN** and **REN** from DGT/SNIT SRUP (REN exclusion polygons are
+  subtracted; municipalities missing from the national dataset answer
+  **unknown**, never "no" — ~50 lack their REN in SNIT, 6 lack a published RAN,
+  and Lisboa/Porto/Amadora genuinely have no RAN);
+- **Rede Natura 2000** (ZEC + ZPE) and **áreas protegidas (RNAP)** from the
+  same catalogue;
+- **albufeiras classificadas** (in-water and the statutory DL 107/2009
+  protection belt, via true server-side distance queries) and the coastal
+  **POC/POOC** areas, safeguard strips, digitized **POAAP** zonings and
+  **PAAP** areas from APA/SNIAmb ArcGIS services.
+
+On top of the live layers, every result lists the **special planning
+instruments** (planos/programas especiais — POAAP/PEAAP, POOC/POC, POE,
+POAP/PEAP) touching the municipality, from a bundled registry of ~121
+instruments compiled from the official APA/ICNF/DGT/DRE registries (statuses
+as of July 2026), with a positive "the queried location falls inside its area"
+marker whenever a live layer confirms it.
+
+Two support levels remain:
+
+- **Full** (dedicated adapter): bundled snapshot layers **+ Regulamento
+  articles**. Pilot: **Tomar** (concelho 1418).
+- **Generic**: every other mainland municipality — live CRUS zoning + the
+  national constraint layers above, at **medium confidence**, with an explicit
+  note that municipality-specific condicionantes and the written regulation are
+  not yet integrated.
+
+The Azores and Madeira are not yet covered: the mainland DGT datasets
+(CAOP/CRUS) exclude them, and the regional services are not yet integrated
+(queries there say so explicitly).
 
 ## Install / build
 
@@ -50,7 +89,7 @@ pdm <lat> <lon>                 query a coordinate (shorthand)
 pdm point <lat> <lon>           query a coordinate
 pdm polygon <file.geojson>      query a parcel polygon
 pdm report <file.geojson|lat lon> [--format ...]   full report
-pdm supported                   list supported municipalities
+pdm supported                   show municipality coverage/support levels
 pdm version
 pdm help
 ```
@@ -132,19 +171,22 @@ GeoJSON) over WMS/raster/PDF.
 
 | Layer | Source | Service |
 |---|---|---|
-| Municipality boundaries | DGT **CAOP** (`municipios`) | OGC API Features |
-| Zoning (classificação e qualificação do solo) | DGT **CRUS** | OGC API Features |
-| RAN (Reserva Agrícola Nacional) | DGT/SNIT **SRUP** | OGC API Features |
-| REN (Reserva Ecológica Nacional) | Município de Tomar / Médio Tejo (**MuniSIG**) | ArcGIS REST (GeoJSON) |
-| Albufeira de Castelo de Bode (POACB area) | Município de Tomar (**MuniSIG**), Zonas de Proteção e Salvaguarda | ArcGIS REST (GeoJSON) |
-| Regulation articles (Regulamento) | *Aviso n.º 1510/2022*, DR 2.ª série n.º 16 | [PDF](https://files.dre.pt/2s/2022/01/016000000/0032700390.pdf) → parsed into 103 articles with section context |
+| Municipality boundaries (all mainland) | DGT **CAOP** (`municipios`) | OGC API Features |
+| Zoning, any mainland municipality (classificação e qualificação do solo) | DGT **CRUS** | OGC API Features |
+| RAN (Reserva Agrícola Nacional) — Tomar | DGT/SNIT **SRUP** | OGC API Features |
+| REN (Reserva Ecológica Nacional) — Tomar | Município de Tomar / Médio Tejo (**MuniSIG**) | ArcGIS REST (GeoJSON) |
+| Albufeira de Castelo de Bode (POACB area) — Tomar | Município de Tomar (**MuniSIG**), Zonas de Proteção e Salvaguarda | ArcGIS REST (GeoJSON) |
+| Regulation articles (Regulamento) — Tomar | *Aviso n.º 1510/2022*, DR 2.ª série n.º 16 | [PDF](https://files.dre.pt/2s/2022/01/016000000/0032700390.pdf) → parsed into 103 articles with section context |
 | Plan metadata | PCGT/DGT | [PCGT](https://pcgt.dgterritorio.gov.pt/FDE12471) |
 
-By default `pdm` runs against a **bundled snapshot** of this data (embedded in the
-binary), so it works offline and deterministically. `--live` fetches fresh data
-from the services above (spatially filtered to the query), caches it locally, and
-falls back to the bundle if a service is unreachable — so public services are
-never hammered.
+Municipalities with a dedicated adapter run against a **bundled snapshot**
+(embedded in the binary) by default, so they work offline and deterministically;
+`--live` fetches fresh data from the services above (spatially filtered to the
+query), caches it locally, and falls back to the bundle if a service is
+unreachable — so public services are never hammered. Municipalities served by
+the **generic adapter have no bundled snapshot**: their zoning is always fetched
+live from CRUS (filtered to the municipality code and the query bbox) and
+cached, `--live` or not.
 
 ### Regenerating the bundled snapshot
 
@@ -175,7 +217,9 @@ internal/
   reg              Regulamento articles + zoning-category → article retrieval
   mapview          projects geometries to an inline SVG locator map
   adapter          per-municipality contract (Adapter interface)
-    tomar          the pilot adapter
+    crus           shared DGT CRUS bits (live loader + feature classification)
+    generic        fallback adapter: any mainland municipality, zoning via CRUS
+    tomar          the pilot full adapter (zoning + RAN/REN/POACB + Regulamento)
   source           data loaders: bundled / file / WFS / OGC API Features + cache
   cache            on-disk cache with timestamps + TTL
   query            the engine: resolve → load layers → intersect → build result
@@ -187,9 +231,11 @@ testdata           example parcels
 
 Key design points:
 
-- **Per-municipality adapters.** The query engine knows nothing about Tomar; it
-  asks the adapter for the plan and the layers. Adding a municipality is a new
-  adapter + one `register(...)` line.
+- **Per-municipality adapters, generic fallback.** The query engine knows
+  nothing about Tomar; it asks the adapter for the plan and the layers. Any
+  municipality without a dedicated adapter is served by the generic CRUS
+  adapter (zoning only). Upgrading one to full support is a new adapter + one
+  `register(...)` line.
 - **Real areas.** Areas/percentages are computed after projecting to
   ETRS89/PT-TM06 (metres), not in degrees.
 - **Overlap-safe coverage.** Per-layer coverage is the *union* of clips, so
@@ -201,10 +247,14 @@ Key design points:
   `official-cache`, `bundled-snapshot`), and confidence is downgraded when a layer
   is missing or a match is absent.
 
-### Adding a municipality
+### Upgrading a municipality to full support
+
+Every mainland municipality already answers zoning via the generic adapter.
+Full support adds its constraint layers and regulation:
 
 1. Create `internal/adapter/<name>/` implementing `adapter.Adapter`
-   (plan, layers, classification).
+   (plan metadata, constraint layers — RAN/REN/servidões, Regulamento). Reuse
+   `internal/adapter/crus` for the zoning layer.
 2. `register(<name>.New())` in `internal/registry/registry.go`.
 3. Add its layers to `cmd/pdmdata` and regenerate the bundled data.
 
@@ -218,10 +268,15 @@ gofmt -l .
 
 ## Limitations
 
-- Pilot covers **Tomar** only; other municipalities are detected but unsupported.
-- Bundled boundaries are simplified for resolution; near a municipal border,
-  prefer `--live`.
-- The pilot ships zoning + RAN + REN. Other *servidões/restrições de utilidade
-  pública* (protected areas, aquifers, aeronautical/road easements, …) are
-  available from the same services and can be added as layers.
+- Only **Tomar** has full support (constraints + Regulamento); every other
+  mainland municipality is **zoning-only** — its results carry an explicit note
+  and low confidence, and missing constraints must not be read as absent ones.
+- The **Azores and Madeira** are not covered (mainland DGT datasets only).
+- Zoning-only municipalities require **network** on first query (live CRUS
+  fetch, then cached).
+- Bundled boundaries are simplified (~30 m) for resolution; near a municipal
+  border the resolved municipality may be wrong.
+- Beyond RAN/REN, other *servidões/restrições de utilidade pública* (protected
+  areas, aquifers, aeronautical/road easements, …) are available from the same
+  services and can be added as layers.
 - Results are an automated approximation — see the disclaimer above.

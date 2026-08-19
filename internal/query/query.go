@@ -5,9 +5,12 @@ package query
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"math"
 	"sort"
+	"strings"
+	"sync"
 	"time"
 
 	"github.com/bernardosimoes/pdm/internal/adapter"
@@ -15,7 +18,10 @@ import (
 	"github.com/bernardosimoes/pdm/internal/crs"
 	"github.com/bernardosimoes/pdm/internal/mapview"
 	"github.com/bernardosimoes/pdm/internal/model"
+	"github.com/bernardosimoes/pdm/internal/national"
+	"github.com/bernardosimoes/pdm/internal/planos"
 	"github.com/bernardosimoes/pdm/internal/registry"
+	"github.com/bernardosimoes/pdm/internal/regstore"
 	"github.com/bernardosimoes/pdm/internal/source"
 	"github.com/bernardosimoes/pdm/internal/spatial"
 	"github.com/peterstace/simplefeatures/geom"
@@ -35,6 +41,12 @@ func New(resolver *admin.Resolver, opts source.Options) *Engine {
 
 // Point answers a coordinate query.
 func (e *Engine) Point(ctx context.Context, lon, lat float64) (*model.PointResult, error) {
+	return e.PointStream(ctx, lon, lat, nil)
+}
+
+// PointStream answers a coordinate query, emitting streaming events as work
+// completes when emit is non-nil. The returned result is identical to Point's.
+func (e *Engine) PointStream(ctx context.Context, lon, lat float64, emit Emit) (*model.PointResult, error) {
 	res := &model.PointResult{
 		Input:       model.Coordinate{Lat: lat, Lon: lon},
 		Zoning:      []model.ZoningHit{},
@@ -48,25 +60,24 @@ func (e *Engine) Point(ctx context.Context, lon, lat float64) (*model.PointResul
 	if !ok {
 		res.Municipality = "(undetermined)"
 		res.Confidence = model.ConfidenceLow
-		res.Notes = append(res.Notes,
-			"Coordinate is outside the bundled administrative coverage; municipality could not be determined.")
+		res.Notes = append(res.Notes, undeterminedNote(lon, lat))
+		if emit != nil {
+			emit(MetaEvent{Event: "meta", Kind: "point", Input: &res.Input, Municipality: res.Municipality})
+		}
 		return res, nil
 	}
-	res.Municipality = muni
+	res.Municipality = muni.Name
 
-	ad, ok := registry.Lookup(muni)
-	if !ok {
-		res.Supported = false
-		res.Confidence = model.ConfidenceLow
-		res.Notes = append(res.Notes, unsupportedNote(muni))
-		return res, nil
-	}
+	ad, dedicated := registry.Resolve(muni.Name, muni.Code)
 	res.Supported = true
+	if !dedicated {
+		res.Notes = append(res.Notes, zoningOnlyNote(muni.Name))
+	}
 	plan := ad.Plan()
 	res.Plan = &plan
 
 	opts := e.opts
-	bb := pointBBox(lon, lat, 0.03)
+	bb := pointBBox(lon, lat, 0.005)
 	opts.BBox = &bb
 
 	pt := spatial.Point(lon, lat)
@@ -74,55 +85,67 @@ func (e *Engine) Point(ctx context.Context, lon, lat float64) (*model.PointResul
 	confidence := ad.BaseConfidence()
 	zoneSeen := map[string]bool{}
 
-	for _, layer := range ad.Layers(opts) {
-		loaded, err := layer.Loader(ctx)
-		if err != nil {
-			res.Notes = append(res.Notes, fmt.Sprintf("Layer %q unavailable: %v", layer.Title, err))
+	layers := composeLayers(ad, muni.Name, muni.Code, opts)
+	var onDone func(int, evaled)
+	if emit != nil {
+		var mapOnce sync.Once
+		emit(MetaEvent{Event: "meta", Kind: "point", Input: &res.Input,
+			Municipality: res.Municipality, Code: muni.Code, Supported: true, Plan: res.Plan, Layers: layerMetas(layers)})
+		onDone = func(i int, ev evaled) {
+			emit(pointLayerEvent(i, pt, ev))
+			// The zoning evaluation already carries the full feature geometry.
+			// Reuse it for the locator map instead of issuing a second live CRUS
+			// request through PointMap. The municipality boundary is bundled.
+			if ev.layer.Kind == adapter.KindZoning {
+				mapOnce.Do(func() {
+					features := ev.loaded.Features
+					if ev.err != nil || ev.probed != nil {
+						features = nil
+					}
+					if m := e.pointMapFromZoning(lon, lat, ev.layer, features); m != nil {
+						if svg := m.SVG(); svg != "" {
+							emit(MapEvent{Event: "map", HTML: svg})
+						}
+					}
+				})
+			}
+		}
+	}
+	for _, ev := range evalLayers(ctx, layers, pointProbeBBox(lon, lat), onDone) {
+		layer := ev.layer
+		if ev.err != nil {
+			res.Notes = append(res.Notes, fmt.Sprintf("Layer %q unavailable: %v", layer.Title, ev.err))
 			confidence = downgrade(confidence)
 			continue
 		}
+		if ev.probed != nil {
+			collector.add(ev.probed.Source)
+			res.Constraints = append(res.Constraints, probedHit(layer, *ev.probed, ""))
+			if ev.probed.Unknown {
+				confidence = downgrade(confidence)
+			}
+			continue
+		}
+		loaded := ev.loaded
 		collector.add(loaded.Source)
 		if isSample(loaded.Source) {
 			confidence = model.ConfidenceLow
 		}
 
+		zoning, constraint := pointLayerHits(pt, ev)
 		switch layer.Kind {
 		case adapter.KindZoning:
-			for _, f := range loaded.Features {
-				if !spatial.Intersects(pt, f.Geometry) {
+			for _, z := range zoning {
+				if zoneSeen[z.Label] { // overlapping layers can repeat a class
 					continue
 				}
-				c := classify(layer, f)
-				if zoneSeen[c.Label] { // overlapping polygons can repeat a class
-					continue
-				}
-				zoneSeen[c.Label] = true
-				res.Zoning = append(res.Zoning, model.ZoningHit{
-					Class:    c.Class,
-					Subclass: c.Subclass,
-					Label:    c.Label,
-					RawCode:  c.RawCode,
-					Layer:    layer.ID,
-				})
+				zoneSeen[z.Label] = true
+				res.Zoning = append(res.Zoning, z)
 			}
 		case adapter.KindConstraint:
-			hit := model.ConstraintHit{
-				Type:  layer.Constraint,
-				Label: layer.Title,
-				Layer: layer.ID,
+			if constraint != nil {
+				res.Constraints = append(res.Constraints, *constraint)
 			}
-			for _, f := range loaded.Features {
-				if spatial.Intersects(pt, f.Geometry) {
-					hit.Present = true
-					if layer.Detail != nil {
-						if d := layer.Detail(f); d != "" {
-							hit.Detail = d
-						}
-					}
-					break
-				}
-			}
-			res.Constraints = append(res.Constraints, hit)
 		}
 	}
 
@@ -130,7 +153,8 @@ func (e *Engine) Point(ctx context.Context, lon, lat float64) (*model.PointResul
 		res.Notes = append(res.Notes, "No zoning category matched the coordinate in the available layers.")
 		confidence = downgrade(confidence)
 	}
-	res.Regulation = attachRegulation(ad, res.Zoning)
+	res.Instruments = enrichInstruments(planos.ForMunicipality(muni.Name), res.Constraints)
+	res.Regulation = attachRegulation(ad, muni.Code, res.Zoning)
 	res.Sources = collector.list()
 	res.Confidence = confidence
 	return res, nil
@@ -138,6 +162,12 @@ func (e *Engine) Point(ctx context.Context, lon, lat float64) (*model.PointResul
 
 // Polygon answers a polygon (parcel) query.
 func (e *Engine) Polygon(ctx context.Context, g geom.Geometry) (*model.PolygonResult, error) {
+	return e.PolygonStream(ctx, g, nil)
+}
+
+// PolygonStream answers a polygon query, emitting streaming events as work
+// completes when emit is non-nil. The returned result is identical to Polygon's.
+func (e *Engine) PolygonStream(ctx context.Context, g geom.Geometry, emit Emit) (*model.PolygonResult, error) {
 	res := &model.PolygonResult{
 		Zoning:      []model.ZoningHit{},
 		Constraints: []model.ConstraintHit{},
@@ -150,11 +180,15 @@ func (e *Engine) Polygon(ctx context.Context, g geom.Geometry) (*model.PolygonRe
 		res.AnalysedAreaM2 = crs.AreaM2(g)
 		res.Municipality = "(undetermined)"
 		res.Confidence = model.ConfidenceLow
-		res.Notes = append(res.Notes,
-			"Polygon does not overlap the bundled administrative coverage; municipality could not be determined.")
+		cx, cy := centroid(g)
+		res.Notes = append(res.Notes, undeterminedNote(cx, cy))
+		if emit != nil {
+			emit(MetaEvent{Event: "meta", Kind: "polygon", AnalysedAreaM2: res.AnalysedAreaM2,
+				Municipality: res.Municipality})
+		}
 		return res, nil
 	}
-	res.Municipality = best.Municipality
+	res.Municipality = best.Municipality.Name
 	// Analyse only the portion inside the resolved municipality, so zoning and
 	// constraint percentages are shares of the analysed area — not of a parcel
 	// that may straddle a boundary into unanalysed municipalities.
@@ -164,14 +198,11 @@ func (e *Engine) Polygon(ctx context.Context, g geom.Geometry) (*model.PolygonRe
 		res.Notes = append(res.Notes, straddleNote(best, overlaps))
 	}
 
-	ad, ok := registry.Lookup(best.Municipality)
-	if !ok {
-		res.Supported = false
-		res.Confidence = model.ConfidenceLow
-		res.Notes = append(res.Notes, unsupportedNote(best.Municipality))
-		return res, nil
-	}
+	ad, dedicated := registry.Resolve(best.Municipality.Name, best.Municipality.Code)
 	res.Supported = true
+	if !dedicated {
+		res.Notes = append(res.Notes, zoningOnlyNote(best.Municipality.Name))
+	}
 	plan := ad.Plan()
 	res.Plan = &plan
 
@@ -182,24 +213,44 @@ func (e *Engine) Polygon(ctx context.Context, g geom.Geometry) (*model.PolygonRe
 	collector := newSourceSet()
 	confidence := ad.BaseConfidence()
 
-	for _, layer := range ad.Layers(opts) {
-		loaded, err := layer.Loader(ctx)
-		if err != nil {
-			res.Notes = append(res.Notes, fmt.Sprintf("Layer %q unavailable: %v", layer.Title, err))
+	layers := composeLayers(ad, best.Municipality.Name, best.Municipality.Code, opts)
+	var onDone func(int, evaled)
+	if emit != nil {
+		emit(MetaEvent{Event: "meta", Kind: "polygon", AnalysedAreaM2: total,
+			Municipality: res.Municipality, Code: best.Municipality.Code, Supported: true, Plan: res.Plan, Layers: layerMetas(layers)})
+		onDone = func(i int, ev evaled) {
+			emit(polygonLayerEvent(i, g, total, ev))
+		}
+	}
+	for _, ev := range evalLayers(ctx, layers, geomBBox(g, 0), onDone) {
+		layer := ev.layer
+		if ev.err != nil {
+			res.Notes = append(res.Notes, fmt.Sprintf("Layer %q unavailable: %v", layer.Title, ev.err))
 			confidence = downgrade(confidence)
 			continue
 		}
+		if ev.probed != nil {
+			collector.add(ev.probed.Source)
+			res.Constraints = append(res.Constraints, probedHit(layer, *ev.probed, envelopeNote))
+			if ev.probed.Unknown {
+				confidence = downgrade(confidence)
+			}
+			continue
+		}
+		loaded := ev.loaded
 		collector.add(loaded.Source)
 		if isSample(loaded.Source) {
 			confidence = model.ConfidenceLow
 		}
 
+		zoning, constraint := polygonLayerHits(g, total, ev)
 		switch layer.Kind {
 		case adapter.KindZoning:
-			res.Zoning = append(res.Zoning, zoningBreakdown(g, total, layer, loaded.Features)...)
+			res.Zoning = append(res.Zoning, zoning...)
 		case adapter.KindConstraint:
-			hit := constraintCoverage(g, total, layer, loaded.Features)
-			res.Constraints = append(res.Constraints, hit)
+			if constraint != nil {
+				res.Constraints = append(res.Constraints, *constraint)
+			}
 		}
 	}
 
@@ -211,7 +262,8 @@ func (e *Engine) Polygon(ctx context.Context, g geom.Geometry) (*model.PolygonRe
 	sort.SliceStable(res.Zoning, func(i, j int) bool { return res.Zoning[i].AreaM2 > res.Zoning[j].AreaM2 })
 	sort.SliceStable(res.Constraints, func(i, j int) bool { return res.Constraints[i].AreaM2 > res.Constraints[j].AreaM2 })
 
-	res.Regulation = attachRegulation(ad, res.Zoning)
+	res.Instruments = enrichInstruments(planos.ForMunicipality(best.Municipality.Name), res.Constraints)
+	res.Regulation = attachRegulation(ad, best.Municipality.Code, res.Zoning)
 	res.Sources = collector.list()
 	res.Confidence = confidence
 	return res, nil
@@ -225,17 +277,14 @@ func (e *Engine) PointMap(ctx context.Context, lon, lat float64) *mapview.Data {
 	if !ok {
 		return nil
 	}
-	ad, ok := registry.Lookup(muni)
-	if !ok {
-		return nil
-	}
+	ad, _ := registry.Resolve(muni.Name, muni.Code)
 	view := viewAround(lon, lat, 3000)
 	d := &mapview.Data{Subject: spatial.Point(lon, lat), SubjectKind: "point"}
 	d.MinLon, d.MinLat, d.MaxLon, d.MaxLat = view.minLon, view.minLat, view.maxLon, view.maxLat
 
 	if b, ok := e.resolver.BoundaryAt(lon, lat); ok {
 		if bc := clipTo(b, view.rect); !bc.IsEmpty() {
-			d.Layers = append(d.Layers, mapview.Layer{ID: "boundary", Label: "Município de " + muni, Role: mapview.RoleBoundary, G: bc})
+			d.Layers = append(d.Layers, mapview.Layer{ID: "boundary", Label: "Município de " + muni.Name, Role: mapview.RoleBoundary, G: bc})
 		}
 	}
 
@@ -245,6 +294,9 @@ func (e *Engine) PointMap(ctx context.Context, lon, lat float64) *mapview.Data {
 	pt := spatial.Point(lon, lat)
 
 	for _, layer := range ad.Layers(opts) {
+		if layer.Probe != nil {
+			continue // probe layers carry no geometry to draw
+		}
 		loaded, err := layer.Loader(ctx)
 		if err != nil {
 			continue
@@ -288,16 +340,48 @@ func (e *Engine) PointMap(ctx context.Context, lon, lat float64) *mapview.Data {
 	return d
 }
 
+// pointMapFromZoning builds the streamed point locator map from zoning
+// features that were already loaded by PointStream. It deliberately draws only
+// the municipality boundary, the queried point and its zoning polygon: nearby
+// context remains available on the interactive Leaflet map, and no second
+// network request is needed here.
+func (e *Engine) pointMapFromZoning(lon, lat float64, layer adapter.Layer, features []spatial.Feature) *mapview.Data {
+	muni, ok := e.resolver.ResolvePoint(lon, lat)
+	if !ok {
+		return nil
+	}
+	view := viewAround(lon, lat, 3000)
+	d := &mapview.Data{Subject: spatial.Point(lon, lat), SubjectKind: "point"}
+	d.MinLon, d.MinLat, d.MaxLon, d.MaxLat = view.minLon, view.minLat, view.maxLon, view.maxLat
+
+	if b, ok := e.resolver.BoundaryAt(lon, lat); ok {
+		if bc := clipTo(b, view.rect); !bc.IsEmpty() {
+			d.Layers = append(d.Layers, mapview.Layer{ID: "boundary", Label: "Município de " + muni.Name, Role: mapview.RoleBoundary, G: bc})
+		}
+	}
+
+	pt := spatial.Point(lon, lat)
+	var at []spatial.Feature
+	label := "Zonamento"
+	for _, f := range features {
+		if spatial.Intersects(pt, f.Geometry) {
+			at = append(at, f)
+			label = classify(layer, f).Label
+		}
+	}
+	if g, _ := spatial.Coverage(view.rect, at); !g.IsEmpty() {
+		d.Layers = append(d.Layers, mapview.Layer{ID: "zoning", Label: label, Role: mapview.RoleZoning, G: simplify(g)})
+	}
+	return d
+}
+
 // PolygonMap builds the map data for a parcel query.
 func (e *Engine) PolygonMap(ctx context.Context, g geom.Geometry) *mapview.Data {
 	best, _, ok := e.resolver.ResolvePolygon(g)
 	if !ok {
 		return nil
 	}
-	ad, ok := registry.Lookup(best.Municipality)
-	if !ok {
-		return nil
-	}
+	ad, _ := registry.Resolve(best.Municipality.Name, best.Municipality.Code)
 	min, max, _ := g.Envelope().MinMaxXYs()
 	cx, cy := (min.X+max.X)/2, (min.Y+max.Y)/2
 	// view spans the parcel plus a margin
@@ -308,15 +392,23 @@ func (e *Engine) PolygonMap(ctx context.Context, g geom.Geometry) *mapview.Data 
 
 	if b, ok := e.resolver.BoundaryAt(cx, cy); ok {
 		if bc := clipTo(b, view.rect); !bc.IsEmpty() {
-			d.Layers = append(d.Layers, mapview.Layer{ID: "boundary", Label: "Município de " + best.Municipality, Role: mapview.RoleBoundary, G: bc})
+			d.Layers = append(d.Layers, mapview.Layer{ID: "boundary", Label: "Município de " + best.Municipality.Name, Role: mapview.RoleBoundary, G: bc})
 		}
 	}
 	opts := e.opts
 	bb := view.bbox()
 	opts.BBox = &bb
+	total := crs.AreaM2(g)
 	for _, layer := range ad.Layers(opts) {
+		if layer.Probe != nil {
+			continue // probe layers carry no geometry to draw
+		}
 		loaded, err := layer.Loader(ctx)
 		if err != nil {
+			continue
+		}
+		if layer.Kind == adapter.KindZoning {
+			d.Layers = append(d.Layers, zoningMapLayers(g, total, layer, loaded.Features)...)
 			continue
 		}
 		var near []spatial.Feature
@@ -336,17 +428,408 @@ func (e *Engine) PolygonMap(ctx context.Context, g geom.Geometry) *mapview.Data 
 		if cov.IsEmpty() {
 			continue
 		}
-		if layer.Kind == adapter.KindZoning {
-			d.Layers = append(d.Layers, mapview.Layer{ID: "zoning", Label: "Zonamento", Role: mapview.RoleZoning, G: simplify(cov)})
-		} else {
-			role := mapview.RoleAbsent
-			if present {
-				role = mapview.RolePresent
-			}
-			d.Layers = append(d.Layers, mapview.Layer{ID: layer.ID, Label: layer.Constraint, Role: role, G: simplify(cov)})
+		role := mapview.RoleAbsent
+		if present {
+			role = mapview.RolePresent
 		}
+		d.Layers = append(d.Layers, mapview.Layer{ID: layer.ID, Label: layer.Constraint, Role: role, G: simplify(cov)})
 	}
 	return d
+}
+
+func zoningMapLayers(g geom.Geometry, total float64, layer adapter.Layer, feats []spatial.Feature) []mapview.Layer {
+	type group struct {
+		c     adapter.Classification
+		feats []spatial.Feature
+	}
+	order := []string{}
+	groups := map[string]*group{}
+	for _, f := range feats {
+		if !spatial.Intersects(g, f.Geometry) {
+			continue
+		}
+		c := classify(layer, f)
+		key := c.Label
+		if groups[key] == nil {
+			groups[key] = &group{c: c}
+			order = append(order, key)
+		}
+		groups[key].feats = append(groups[key].feats, f)
+	}
+	var out []mapview.Layer
+	for i, key := range order {
+		grp := groups[key]
+		cov, err := spatial.Coverage(g, grp.feats)
+		if err != nil || cov.IsEmpty() {
+			continue
+		}
+		label := grp.c.Subclass
+		if label == "" {
+			label = grp.c.Label
+		}
+		if area := crs.AreaM2(cov); total > 0 && area > 0 {
+			label = fmt.Sprintf("%s %.1f%%", label, percent(area, total))
+		}
+		id := "zoning"
+		if i > 0 {
+			id = fmt.Sprintf("zoning-%d", i+1)
+		}
+		out = append(out, mapview.Layer{
+			ID:    id,
+			Label: label,
+			Role:  mapview.RoleZoning,
+			G:     simplify(cov),
+			Color: zoningColor(grp.c),
+		})
+	}
+	return out
+}
+
+func zoningColor(c adapter.Classification) string {
+	s := strings.ToLower(c.Label + " " + c.Subclass + " " + c.Class)
+	switch {
+	case strings.Contains(s, "habit"):
+		return "#4f6fd9"
+	case strings.Contains(s, "natural") || strings.Contains(s, "paisag"):
+		return "#2f8f6b"
+	case strings.Contains(s, "turíst") || strings.Contains(s, "turist"):
+		return "#8b5fc7"
+	case strings.Contains(s, "florest"):
+		return "#4f8a3d"
+	case strings.Contains(s, "agr"):
+		return "#c9912e"
+	case strings.Contains(s, "equip") || strings.Contains(s, "infra"):
+		return "#2f8fa3"
+	case strings.Contains(s, "urb") || strings.Contains(s, "edific"):
+		return "#d46a3a"
+	default:
+		return "#7a6f8f"
+	}
+}
+
+// composeLayers merges the adapter's own layers with the national constraint
+// layers available for every mainland municipality. National layers whose
+// canonical constraint type the adapter already provides (e.g. Tomar's bundled
+// RAN/REN) are skipped — the dedicated source is richer.
+func composeLayers(ad adapter.Adapter, name, code string, opts source.Options) []adapter.Layer {
+	layers := ad.Layers(opts)
+	skip := map[string]bool{}
+	for _, l := range layers {
+		if l.Constraint != "" {
+			skip[l.Constraint] = true
+		}
+	}
+	return append(layers, national.Layers(name, code, opts, skip)...)
+}
+
+// evaled is one layer's outcome: features for geometry layers, a probe result
+// for probe layers, or an error.
+type evaled struct {
+	layer  adapter.Layer
+	loaded source.Loaded
+	probed *source.Probed
+	err    error
+}
+
+// evalLayers evaluates all layers concurrently (bounded), preserving order.
+// Layers are independent HTTP fetches against slow public services, so
+// parallelism cuts wall-clock roughly by the number of layers. onDone, when
+// non-nil, is invoked from the worker goroutine as each layer finishes.
+func evalLayers(ctx context.Context, layers []adapter.Layer, probeBB source.BBox, onDone func(i int, ev evaled)) []evaled {
+	out := make([]evaled, len(layers))
+	sem := make(chan struct{}, 10)
+	var wg sync.WaitGroup
+	for i, l := range layers {
+		wg.Add(1)
+		go func(i int, l adapter.Layer) {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+			if l.Probe != nil {
+				p, err := l.Probe(ctx, probeBB)
+				out[i] = evaled{layer: l, probed: &p, err: err}
+			} else {
+				loaded, err := l.Loader(ctx)
+				out[i] = evaled{layer: l, loaded: loaded, err: err}
+			}
+			if onDone != nil {
+				onDone(i, out[i])
+			}
+		}(i, l)
+	}
+	wg.Wait()
+	return out
+}
+
+// envelopeNote is the caveat attached to probed constraints in polygon queries,
+// where presence is tested against the polygon's envelope.
+const envelopeNote = "Presença avaliada pelo envelope do polígono (aproximação); área e percentagem não calculadas."
+
+// pointLayerHits extracts one loaded layer's hits at a point. Zoning labels are
+// deduped within the layer only; callers apply cross-layer dedup.
+func pointLayerHits(pt geom.Geometry, ev evaled) (zoning []model.ZoningHit, constraint *model.ConstraintHit) {
+	layer := ev.layer
+	switch layer.Kind {
+	case adapter.KindZoning:
+		seen := map[string]bool{}
+		for _, f := range ev.loaded.Features {
+			if !spatial.Intersects(pt, f.Geometry) {
+				continue
+			}
+			c := classify(layer, f)
+			if seen[c.Label] { // overlapping polygons can repeat a class
+				continue
+			}
+			seen[c.Label] = true
+			zoning = append(zoning, model.ZoningHit{
+				Class:    c.Class,
+				Subclass: c.Subclass,
+				Label:    c.Label,
+				RawCode:  c.RawCode,
+				Layer:    layer.ID,
+				Color:    zoningColor(c),
+			})
+		}
+	case adapter.KindConstraint:
+		hit := model.ConstraintHit{
+			Type:  layer.Constraint,
+			Label: layer.Title,
+			Layer: layer.ID,
+		}
+		for _, f := range ev.loaded.Features {
+			if spatial.Intersects(pt, f.Geometry) {
+				hit.Present = true
+				if layer.Detail != nil {
+					if d := layer.Detail(f); d != "" {
+						hit.Detail = d
+					}
+				}
+				break
+			}
+		}
+		constraint = &hit
+	}
+	return zoning, constraint
+}
+
+// polygonLayerHits extracts one loaded layer's hits across a parcel.
+func polygonLayerHits(g geom.Geometry, total float64, ev evaled) (zoning []model.ZoningHit, constraint *model.ConstraintHit) {
+	layer := ev.layer
+	switch layer.Kind {
+	case adapter.KindZoning:
+		zoning = zoningBreakdown(g, total, layer, ev.loaded.Features)
+	case adapter.KindConstraint:
+		hit := constraintCoverage(g, total, layer, ev.loaded.Features)
+		constraint = &hit
+	}
+	return zoning, constraint
+}
+
+// pointLayerEvent converts an evaluated layer into its streaming event.
+func pointLayerEvent(i int, pt geom.Geometry, ev evaled) LayerEvent {
+	le := LayerEvent{Event: "layer", Index: i, ID: ev.layer.ID}
+	switch {
+	case ev.err != nil:
+		le.Error = fmt.Sprintf("unavailable: %v", ev.err)
+	case ev.probed != nil:
+		h := probedHit(ev.layer, *ev.probed, "")
+		le.Constraint = &h
+	default:
+		le.Zoning, le.Constraint = pointLayerHits(pt, ev)
+		if ev.layer.Kind == adapter.KindZoning {
+			le.ZoningGeoJSON = pointZoningGeoJSON(pt, ev.layer, ev.loaded.Features)
+		}
+	}
+	return le
+}
+
+// polygonLayerEvent converts an evaluated layer into its streaming event.
+func polygonLayerEvent(i int, g geom.Geometry, total float64, ev evaled) LayerEvent {
+	le := LayerEvent{Event: "layer", Index: i, ID: ev.layer.ID}
+	switch {
+	case ev.err != nil:
+		le.Error = fmt.Sprintf("unavailable: %v", ev.err)
+	case ev.probed != nil:
+		h := probedHit(ev.layer, *ev.probed, envelopeNote)
+		le.Constraint = &h
+	default:
+		le.Zoning, le.Constraint = polygonLayerHits(g, total, ev)
+		if ev.layer.Kind == adapter.KindZoning {
+			le.ZoningGeoJSON = zoningGeoJSON(g, total, ev.layer, ev.loaded.Features)
+		}
+	}
+	return le
+}
+
+type zoningFeatureCollection struct {
+	Type     string          `json:"type"`
+	Features []zoningFeature `json:"features"`
+}
+
+type zoningFeature struct {
+	Type       string          `json:"type"`
+	Properties map[string]any  `json:"properties"`
+	Geometry   json.RawMessage `json:"geometry"`
+}
+
+// pointZoningGeoJSON returns the complete zoning polygons that contain a
+// queried point. Unlike zoningGeoJSON for parcels, it must not intersect the
+// geometry with the zero-area point: doing so would collapse every polygon and
+// leave the interactive map with nothing to draw.
+func pointZoningGeoJSON(pt geom.Geometry, layer adapter.Layer, feats []spatial.Feature) *zoningFeatureCollection {
+	type group struct {
+		c     adapter.Classification
+		geoms []geom.Geometry
+	}
+	order := []string{}
+	groups := map[string]*group{}
+	for _, f := range feats {
+		if !spatial.Intersects(pt, f.Geometry) {
+			continue
+		}
+		c := classify(layer, f)
+		if groups[c.Label] == nil {
+			groups[c.Label] = &group{c: c}
+			order = append(order, c.Label)
+		}
+		groups[c.Label].geoms = append(groups[c.Label].geoms, f.Geometry)
+	}
+	fc := &zoningFeatureCollection{Type: "FeatureCollection"}
+	for _, key := range order {
+		grp := groups[key]
+		g, err := spatial.UnionAll(grp.geoms)
+		if err != nil || g.IsEmpty() {
+			continue
+		}
+		raw, err := simplify(g).MarshalJSON()
+		if err != nil {
+			continue
+		}
+		fc.Features = append(fc.Features, zoningFeature{
+			Type: "Feature",
+			Properties: map[string]any{
+				"class":    grp.c.Class,
+				"subclass": grp.c.Subclass,
+				"label":    grp.c.Label,
+				"color":    zoningColor(grp.c),
+			},
+			Geometry: json.RawMessage(raw),
+		})
+	}
+	if len(fc.Features) == 0 {
+		return nil
+	}
+	return fc
+}
+
+func zoningGeoJSON(g geom.Geometry, total float64, layer adapter.Layer, feats []spatial.Feature) *zoningFeatureCollection {
+	type group struct {
+		c     adapter.Classification
+		feats []spatial.Feature
+	}
+	order := []string{}
+	groups := map[string]*group{}
+	for _, f := range feats {
+		if !spatial.Intersects(g, f.Geometry) {
+			continue
+		}
+		c := classify(layer, f)
+		key := c.Label
+		if groups[key] == nil {
+			groups[key] = &group{c: c}
+			order = append(order, key)
+		}
+		groups[key].feats = append(groups[key].feats, f)
+	}
+	fc := &zoningFeatureCollection{Type: "FeatureCollection"}
+	for _, key := range order {
+		grp := groups[key]
+		cov, err := spatial.Coverage(g, grp.feats)
+		if err != nil || cov.IsEmpty() {
+			continue
+		}
+		area := crs.AreaM2(cov)
+		if area <= 0 {
+			continue
+		}
+		raw, err := simplify(cov).MarshalJSON()
+		if err != nil {
+			continue
+		}
+		fc.Features = append(fc.Features, zoningFeature{
+			Type: "Feature",
+			Properties: map[string]any{
+				"class":    grp.c.Class,
+				"subclass": grp.c.Subclass,
+				"label":    grp.c.Label,
+				"area_m2":  area,
+				"percent":  percent(area, total),
+				"color":    zoningColor(grp.c),
+			},
+			Geometry: json.RawMessage(raw),
+		})
+	}
+	if len(fc.Features) == 0 {
+		return nil
+	}
+	return fc
+}
+
+// probedHit converts a probe outcome into a constraint hit; extraNote is
+// appended for callers that add their own caveat (polygon envelope tests).
+func probedHit(layer adapter.Layer, p source.Probed, extraNote string) model.ConstraintHit {
+	note := p.Note
+	if extraNote != "" {
+		if note != "" {
+			note += " "
+		}
+		note += extraNote
+	}
+	return model.ConstraintHit{
+		Type:    layer.Constraint,
+		Label:   layer.Title,
+		Layer:   layer.ID,
+		Present: p.Present,
+		Unknown: p.Unknown,
+		Detail:  p.Detail,
+		Note:    note,
+	}
+}
+
+// pointProbeBBox is the tight envelope used for server-side presence probes at
+// a coordinate: ±0.00002° (about two metres).
+func pointProbeBBox(lon, lat float64) source.BBox {
+	const eps = 0.00002
+	return source.BBox{MinLon: lon - eps, MinLat: lat - eps, MaxLon: lon + eps, MaxLat: lat + eps}
+}
+
+// enrichInstruments attaches the registry's special instruments for the
+// municipality, marking PointInside=true where a live layer positively named
+// the instrument's subject at the location. Absence of a match leaves nil —
+// most instruments' full areas (e.g. a POAAP's 500 m belt) are wider than the
+// layers checked, so "not confirmed inside" must never read as "outside".
+func enrichInstruments(instruments []model.Instrument, hits []model.ConstraintHit) []model.Instrument {
+	if len(instruments) == 0 {
+		return nil
+	}
+	var details []string
+	for _, h := range hits {
+		if !h.Present {
+			continue
+		}
+		details = append(details, h.Type+" "+h.Label+" "+h.Detail)
+	}
+	for i := range instruments {
+		ins := &instruments[i]
+		for _, d := range details {
+			if planos.Match(ins.ID, d) {
+				v := true
+				ins.PointInside = &v
+				break
+			}
+		}
+	}
+	return instruments
 }
 
 type viewBox struct {
@@ -394,9 +877,15 @@ func distM(lon1, lat1, lon2, lat2 float64) float64 {
 
 // attachRegulation retrieves the regulation articles applicable to the result's
 // zoning categories. This is pure retrieval: it hands over the rules to read,
-// it does not interpret them into building parameters.
-func attachRegulation(ad adapter.Adapter, zoning []model.ZoningHit) *model.Regulation {
+// it does not interpret them into building parameters. The adapter's own parsed
+// regulation wins; otherwise the data-driven regstore (keyed by the resolved
+// municipality's dtcc code) supplies it, so any bundled municipality gets
+// regulation with no per-municipality adapter.
+func attachRegulation(ad adapter.Adapter, code string, zoning []model.ZoningHit) *model.Regulation {
 	store := ad.Regulation()
+	if store == nil {
+		store = regstore.ForCode(code)
+	}
 	if store == nil {
 		return nil
 	}
@@ -462,6 +951,7 @@ func zoningBreakdown(g geom.Geometry, total float64, layer adapter.Layer, feats 
 			Label:    grp.c.Label,
 			RawCode:  grp.c.RawCode,
 			Layer:    layer.ID,
+			Color:    zoningColor(grp.c),
 			AreaM2:   area,
 			Percent:  percent(area, total),
 		})
@@ -516,16 +1006,49 @@ func geomBBox(g geom.Geometry, pad float64) source.BBox {
 	}
 }
 
-func unsupportedNote(muni string) string {
-	sup := registry.Supported()
-	return fmt.Sprintf("Municipality %q detected but not yet supported. Supported: %v.", muni, sup)
+// zoningOnlyNote explains what a generic (no dedicated adapter) result does and
+// does not cover. Zoning and the national constraint layers are checked for
+// every mainland municipality; what a dedicated adapter still adds is the
+// municipality's own condicionantes detail and the parsed written regulation.
+func zoningOnlyNote(muni string) string {
+	return fmt.Sprintf(
+		"%s has no dedicated adapter yet: zoning comes from the national DGT CRUS dataset and the "+
+			"constraints above from national services (DGT/SNIT SRUP, APA/SNIAmb), fetched live and cached. "+
+			"Municipality-specific condicionantes layers and the written regulation (Regulamento) are not "+
+			"integrated — do not read missing local detail as inexistence.",
+		muni)
+}
+
+// undeterminedNote explains why no municipality matched, calling out the
+// autonomous regions (not covered by the mainland CAOP/CRUS datasets).
+func undeterminedNote(lon, lat float64) string {
+	switch {
+	case lon >= -31.5 && lon <= -24.5 && lat >= 36.5 && lat <= 40.0:
+		return "The location is in the Autonomous Region of the Azores, which the mainland DGT datasets (CAOP/CRUS) " +
+			"do not cover; the regional planning services are not yet integrated."
+	case lon >= -17.5 && lon <= -15.5 && lat >= 29.9 && lat <= 33.5:
+		return "The location is in the Autonomous Region of Madeira, which the mainland DGT datasets (CAOP/CRUS) " +
+			"do not cover; the regional planning services are not yet integrated."
+	default:
+		return "The location is outside the bundled administrative coverage (mainland Portugal, CAOP); " +
+			"the municipality could not be determined."
+	}
+}
+
+// centroid returns the centre of a geometry's envelope (fallback 0,0).
+func centroid(g geom.Geometry) (lon, lat float64) {
+	min, max, ok := g.Envelope().MinMaxXYs()
+	if !ok {
+		return 0, 0
+	}
+	return (min.X + max.X) / 2, (min.Y + max.Y) / 2
 }
 
 func straddleNote(best admin.Overlap, overlaps []admin.Overlap) string {
 	return fmt.Sprintf(
 		"Polygon straddles %d municipalities; analysing the majority one (%s, %.1f%% of area). "+
 			"Results for the remainder are not included.",
-		len(overlaps), best.Municipality, best.Percent)
+		len(overlaps), best.Municipality.Name, best.Percent)
 }
 
 func isSample(s model.Source) bool { return s.Provenance == model.ProvenanceSample }

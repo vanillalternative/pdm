@@ -1,0 +1,6 @@
+{
+  "_note": "Demand ranking snapshot: per-dtcc query counts. Refreshed by the fetch-regulamentos skill from the production /api/stats endpoint and committed so ranking is reproducible on any machine. Not a regulation file — the regstore loader skips it.",
+  "counts": {},
+  "names": {},
+  "updated_at": null
+}

@@ -719,11 +719,13 @@ func pointLayerEvent(i int, pt geom.Geometry, ev evaled) LayerEvent {
 	case ev.probed != nil:
 		h := probedHit(ev.layer, *ev.probed, "")
 		le.Constraint = &h
+		le.Source = layerEventSource(ev.probed.Source)
 	default:
 		le.Zoning, le.Constraint = pointLayerHits(pt, ev)
 		if ev.layer.Kind == adapter.KindZoning {
 			le.ZoningGeoJSON = pointZoningGeoJSON(pt, ev.layer, ev.loaded.Features)
 		}
+		le.Source = layerEventSource(ev.loaded.Source)
 	}
 	return le
 }
@@ -737,13 +739,24 @@ func polygonLayerEvent(i int, g geom.Geometry, total float64, ev evaled) LayerEv
 	case ev.probed != nil:
 		h := probedHit(ev.layer, *ev.probed, envelopeNote)
 		le.Constraint = &h
+		le.Source = layerEventSource(ev.probed.Source)
 	default:
 		le.Zoning, le.Constraint = polygonLayerHits(g, total, ev)
 		if ev.layer.Kind == adapter.KindZoning {
 			le.ZoningGeoJSON = zoningGeoJSON(g, total, ev.layer, ev.loaded.Features)
 		}
+		le.Source = layerEventSource(ev.loaded.Source)
 	}
 	return le
+}
+
+// layerEventSource wraps a layer's attribution for its streaming event,
+// dropping empty sources so the field is omitted rather than a zero object.
+func layerEventSource(s model.Source) *model.Source {
+	if s == (model.Source{}) {
+		return nil
+	}
+	return &s
 }
 
 type zoningFeatureCollection struct {
@@ -796,6 +809,7 @@ func pointZoningGeoJSON(pt geom.Geometry, layer adapter.Layer, feats []spatial.F
 				"class":    grp.c.Class,
 				"subclass": grp.c.Subclass,
 				"label":    grp.c.Label,
+				"raw_code": grp.c.RawCode,
 				"color":    zoningColor(grp.c),
 			},
 			Geometry: json.RawMessage(raw),
@@ -847,6 +861,7 @@ func zoningGeoJSON(g geom.Geometry, total float64, layer adapter.Layer, feats []
 				"class":    grp.c.Class,
 				"subclass": grp.c.Subclass,
 				"label":    grp.c.Label,
+				"raw_code": grp.c.RawCode,
 				"area_m2":  area,
 				"percent":  percent(area, total),
 				"color":    zoningColor(grp.c),

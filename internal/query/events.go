@@ -39,7 +39,9 @@ type MetaEvent struct {
 }
 
 // LayerEvent reports one layer's outcome as soon as it is evaluated. Index
-// refers back to MetaEvent.Layers (IDs alone need not be unique).
+// refers back to MetaEvent.Layers (IDs alone need not be unique). Source is
+// the attribution of the data that actually answered the layer (absent on
+// error), so a streaming client can label provenance per layer.
 type LayerEvent struct {
 	Event         string               `json:"event"` // "layer"
 	Index         int                  `json:"i"`
@@ -47,6 +49,7 @@ type LayerEvent struct {
 	Zoning        []model.ZoningHit    `json:"zoning,omitempty"`
 	ZoningGeoJSON any                  `json:"zoning_geojson,omitempty"`
 	Constraint    *model.ConstraintHit `json:"constraint,omitempty"`
+	Source        *model.Source        `json:"source,omitempty"`
 	Error         string               `json:"error,omitempty"`
 }
 

@@ -2,6 +2,7 @@ package query_test
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -308,6 +309,42 @@ func TestPolygonTruthMirrorBypassed(t *testing.T) {
 	}
 	if len(res.Zoning) != 1 || res.Zoning[0].Label != "Solo Rústico - Espaços Florestais" {
 		t.Fatalf("unexpected zoning: %+v", res.Zoning)
+	}
+}
+
+// TestPointStreamLayerEventSourceAndRawCode: streamed layer events carry the
+// attribution of the data that answered them, and the zoning GeoJSON
+// properties include the raw source code.
+func TestPointStreamLayerEventSourceAndRawCode(t *testing.T) {
+	eng := newEngineOpts(t, source.Options{
+		Live: false, HTTP: stubClient(t, nil, fzRoutes(fzTruthHit)),
+		TruthAPI: "http://mirror.local",
+	})
+	var mu sync.Mutex
+	var zoningEvents []query.LayerEvent
+	_, err := eng.PointStream(context.Background(), fzLon, fzLat, func(v any) {
+		if ev, ok := v.(query.LayerEvent); ok && ev.ID == "ordenamento" {
+			mu.Lock()
+			zoningEvents = append(zoningEvents, ev)
+			mu.Unlock()
+		}
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(zoningEvents) != 1 {
+		t.Fatalf("expected one zoning layer event, got %d", len(zoningEvents))
+	}
+	ev := zoningEvents[0]
+	if ev.Source == nil || ev.Source.Provenance != model.ProvenanceRecordedMirror {
+		t.Fatalf("expected a recorded-mirror source on the layer event, got %+v", ev.Source)
+	}
+	gj, err := json.Marshal(ev.ZoningGeoJSON)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(gj), `"raw_code":"F1"`) {
+		t.Errorf("zoning_geojson properties must include raw_code, got %s", gj)
 	}
 }
 

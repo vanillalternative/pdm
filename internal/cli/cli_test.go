@@ -61,6 +61,79 @@ func TestParseUnknownFlag(t *testing.T) {
 	}
 }
 
+func TestParseTruthAPIFlag(t *testing.T) {
+	var o options
+	pos, err := parse([]string{"point", "39.60", "-8.41", "--truth-api", "http://localhost:3033"}, &o)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Join(pos, ",") != "point,39.60,-8.41" {
+		t.Errorf("positionals wrong: %v", pos)
+	}
+	if o.truthAPI != "http://localhost:3033" || !o.truthAPISet {
+		t.Errorf("truth-api not parsed: %q set=%v", o.truthAPI, o.truthAPISet)
+	}
+}
+
+func TestParseTruthAPIInlineEmpty(t *testing.T) {
+	var o options
+	if _, err := parse([]string{"--truth-api="}, &o); err != nil {
+		t.Fatal(err)
+	}
+	if o.truthAPI != "" || !o.truthAPISet {
+		t.Errorf("--truth-api= must be an explicit empty value, got %q set=%v", o.truthAPI, o.truthAPISet)
+	}
+}
+
+func TestBuildEngineTruthAPI(t *testing.T) {
+	base := func(t *testing.T) options {
+		t.Helper()
+		return options{cacheDir: t.TempDir()}
+	}
+	t.Run("valid env", func(t *testing.T) {
+		t.Setenv("PDM_TRUTH_API", "http://localhost:3033/")
+		if _, err := buildEngine(base(t)); err != nil {
+			t.Fatalf("valid PDM_TRUTH_API must not error: %v", err)
+		}
+	})
+	t.Run("invalid env errors", func(t *testing.T) {
+		t.Setenv("PDM_TRUTH_API", "not-a-url")
+		_, err := buildEngine(base(t))
+		if err == nil || !strings.Contains(err.Error(), "PDM_TRUTH_API") {
+			t.Fatalf("expected an error naming PDM_TRUTH_API, got %v", err)
+		}
+	})
+	t.Run("invalid flag errors", func(t *testing.T) {
+		o := base(t)
+		o.truthAPI, o.truthAPISet = "ftp://mirror", true
+		_, err := buildEngine(o)
+		if err == nil || !strings.Contains(err.Error(), "--truth-api") {
+			t.Fatalf("expected an error naming --truth-api, got %v", err)
+		}
+	})
+	t.Run("inline-empty flag overrides invalid env", func(t *testing.T) {
+		t.Setenv("PDM_TRUTH_API", "not-a-url")
+		o := base(t)
+		o.truthAPI, o.truthAPISet = "", true
+		if _, err := buildEngine(o); err != nil {
+			t.Fatalf("--truth-api= must disable the mirror and skip env validation, got %v", err)
+		}
+	})
+}
+
+// TestRunTruthAPIInvalidFlagExit: the exit path — an invalid --truth-api value
+// fails the command before any query work.
+func TestRunTruthAPIInvalidFlagExit(t *testing.T) {
+	var out, errb bytes.Buffer
+	code := Run([]string{"point", "39.60", "-8.41", "--truth-api", "not-a-url", "--no-cache"}, &out, &errb)
+	if code != 1 {
+		t.Fatalf("expected exit 1, got %d (stderr=%q)", code, errb.String())
+	}
+	if !strings.Contains(errb.String(), "--truth-api") {
+		t.Errorf("stderr should name the flag, got %q", errb.String())
+	}
+}
+
 func TestRunVersion(t *testing.T) {
 	var out, errb bytes.Buffer
 	code := Run([]string{"version"}, &out, &errb)

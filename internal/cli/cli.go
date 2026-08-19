@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -54,6 +55,10 @@ OPTIONS:
   --live                          fetch from official geoservices (falls back to bundled)
   --no-cache                      do not read/write the local cache
   --cache-dir <dir>               override the cache directory
+  --truth-api <url>               pdms recorded-zoning mirror, consulted before the
+                                  official sources for point queries on generic
+                                  municipalities (--live bypasses it; also set via
+                                  the PDM_TRUTH_API env var; --truth-api= disables)
 
 EXAMPLES:
   pdm 39.60 -8.41
@@ -76,6 +81,11 @@ type options struct {
 	live      bool
 	noCache   bool
 	cacheDir  string
+	// truthAPI overrides the PDM_TRUTH_API env var when truthAPISet — an
+	// explicit empty value (--truth-api=) disables the mirror even with the
+	// env var set.
+	truthAPI    string
+	truthAPISet bool
 }
 
 // Run parses args (excluding the program name) and executes, returning an exit
@@ -619,6 +629,17 @@ func buildEngine(opts options) (*query.Engine, error) {
 		}
 		so.MaxAttempts = attempts
 	}
+	truthAPI := strings.TrimSpace(os.Getenv("PDM_TRUTH_API"))
+	if opts.truthAPISet {
+		truthAPI = strings.TrimSpace(opts.truthAPI)
+	}
+	if truthAPI != "" {
+		u, err := url.Parse(truthAPI)
+		if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+			return nil, fmt.Errorf("invalid truth-mirror URL %q (--truth-api flag or PDM_TRUTH_API env var): expected http(s)://host[/path]", truthAPI)
+		}
+		so.TruthAPI = strings.TrimRight(truthAPI, "/")
+	}
 	eng := query.New(resolver, so)
 	// Freguesia labelling is optional — a broken dataset must not block queries.
 	if fr, err := admin.NewFreguesiaResolver(data.Freguesias); err == nil {
@@ -683,6 +704,15 @@ func parse(args []string, opts *options) ([]string, error) {
 					return nil, err
 				}
 				opts.cacheDir = v
+			case "truth-api":
+				// Inline-empty (--truth-api=) is a valid value: an explicit disable
+				// that overrides PDM_TRUTH_API.
+				v, err := needValue(name, val, hasInline, args, &i)
+				if err != nil {
+					return nil, err
+				}
+				opts.truthAPI = v
+				opts.truthAPISet = true
 			case "live":
 				opts.live = true
 			case "no-cache":

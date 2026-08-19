@@ -40,7 +40,14 @@ type Layer struct {
 	Constraint string
 
 	// Loader lazily produces the layer's features (bundled/cache/live).
+	// Unused when Probe is set.
 	Loader source.Loader
+
+	// Probe, when set, answers the layer by asking the source service what
+	// intersects the subject (server-side, attributes only) instead of loading
+	// feature geometries. Used for national layers whose polygons are far too
+	// large to download. Probe layers carry no geometry, so map views skip them.
+	Probe source.Prober
 
 	// Classify interprets a zoning feature. Required for KindZoning.
 	Classify func(spatial.Feature) Classification

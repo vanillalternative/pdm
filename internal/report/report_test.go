@@ -69,6 +69,38 @@ func TestPolygonEmptyStates(t *testing.T) {
 	}
 }
 
+func TestPolygonMarkdownExplainsApproximateREN(t *testing.T) {
+	r := &model.PolygonResult{
+		Municipality:   "Almada",
+		Supported:      true,
+		AnalysedAreaM2: 76296,
+		Constraints: []model.ConstraintHit{{
+			Type:    "REN",
+			Present: true,
+			Detail:  "delimitação municipal da REN em vigor (AVISO 19707/2021)",
+			Note:    "A fonte nacional dá a delimitação da REN sem desagregação por tipologia (erosão, cheias, aquíferos…). Presença avaliada pelo envelope do polígono (aproximação); área e percentagem não calculadas.",
+		}},
+		Confidence: model.ConfidenceMedium,
+		Disclaimer: model.Disclaimer,
+	}
+	var b strings.Builder
+	if err := Polygon(&b, r, FormatMarkdown); err != nil {
+		t.Fatal(err)
+	}
+	out := b.String()
+	for _, want := range []string{
+		"yes (approx.)",
+		"Reserva Ecológica Nacional",
+		"does not identify the REN subtype",
+		"Obtain the municipal REN plant/extract",
+		"exact affected area and percentage were not calculated",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("markdown REN explanation missing %q:\n%s", want, out)
+		}
+	}
+}
+
 func TestParseFormat(t *testing.T) {
 	for _, s := range []string{"", "text", "json", "markdown", "md"} {
 		if _, err := ParseFormat(s); err != nil {

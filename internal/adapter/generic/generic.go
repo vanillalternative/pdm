@@ -1,19 +1,18 @@
 // Package generic is the fallback adapter serving any mainland municipality
 // without a dedicated one. It answers zoning from the national DGT CRUS
-// dataset (the harmonised carta of every municipality's plans in force) and
-// the national SRUP constraints (Rede Natura 2000, rural fire hazard) —
-// nothing municipality-specific is hardcoded. Because those datasets are far
-// too large to bundle nationally, this adapter always fetches live (cached);
-// and because the municipal constraint layers (RAN, REN, servidões locais) and
-// the parsed regulation are still missing, results are capped at low
-// confidence and clearly annotated. Dedicated adapters (like Tomar's) add
-// those layers one municipality at a time.
+// dataset (the harmonised carta of every municipality's plans in force) —
+// nothing municipality-specific is hardcoded. Because CRUS is far too large to
+// bundle nationally, this adapter always fetches live (cached). The national
+// constraint layers (RAN, REN, Natura 2000, áreas protegidas, albufeiras, orla
+// costeira) are not declared here — the query engine composes them for every
+// municipality, dedicated or not (see internal/national). What a dedicated
+// adapter still adds is the municipality's own condicionantes and the parsed
+// written regulation.
 package generic
 
 import (
 	"github.com/bernardosimoes/pdm/internal/adapter"
 	"github.com/bernardosimoes/pdm/internal/adapter/crus"
-	"github.com/bernardosimoes/pdm/internal/adapter/srup"
 	"github.com/bernardosimoes/pdm/internal/model"
 	"github.com/bernardosimoes/pdm/internal/reg"
 	"github.com/bernardosimoes/pdm/internal/source"
@@ -36,11 +35,13 @@ func (a *Adapter) Municipality() string { return a.name }
 func (a *Adapter) Regulation() *reg.Store { return nil }
 
 func (a *Adapter) BaseConfidence() model.Confidence {
-	// The zoning (DGT CRUS) and national servidões (SRUP) are authoritative,
-	// but the answer is still partial: the municipal constraint layers (RAN,
-	// REN, servidões locais) and the regulation are not checked, so the
-	// overall result is capped at low.
-	return model.ConfidenceLow
+	// Zoning is authoritative (DGT CRUS) and the national constraint layers
+	// (RAN, REN, Natura 2000, áreas protegidas, albufeiras, orla costeira) are
+	// probed live for every municipality — comparable to a dedicated adapter,
+	// minus the municipality's own condicionantes and the parsed regulation, so
+	// medium is the ceiling. Data gaps (e.g. REN missing from SNIT) downgrade
+	// further at query time.
+	return model.ConfidenceMedium
 }
 
 func (a *Adapter) Plan() model.PlanInfo {
@@ -71,7 +72,7 @@ func (a *Adapter) Layers(opts source.Options) []adapter.Layer {
 	// There is no bundled snapshot for this municipality, so live fetching
 	// (bbox-limited, cached) is the only way to answer — regardless of --live.
 	opts.Live = true
-	layers := []adapter.Layer{
+	return []adapter.Layer{
 		{
 			ID:       "ordenamento",
 			Title:    "Ordenamento — classificação e qualificação do solo (CRUS/PDM)",
@@ -80,5 +81,4 @@ func (a *Adapter) Layers(opts source.Options) []adapter.Layer {
 			Classify: crus.Classify,
 		},
 	}
-	return append(layers, srup.Layers(opts)...)
 }

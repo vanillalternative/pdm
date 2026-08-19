@@ -41,19 +41,33 @@ func (b BBox) empty() bool { return b == BBox{} }
 
 // Options carry the shared runtime configuration for building loaders.
 type Options struct {
-	Live  bool         // attempt live fetch before falling back to bundled
-	Cache *cache.Cache // response cache (may be nil)
-	HTTP  *http.Client // HTTP client (defaults applied if nil)
-	BBox  *BBox        // spatial filter for live requests
+	Live           bool          // attempt live fetch before falling back to bundled
+	Cache          *cache.Cache  // response cache (may be nil)
+	HTTP           *http.Client  // HTTP client (defaults applied if nil)
+	BBox           *BBox         // spatial filter for live requests
+	AttemptTimeout time.Duration // per-request attempt timeout (0 = package default)
+	MaxAttempts    int           // live-fetch attempts (0 = package default)
 }
 
 func (o Options) client() *http.Client {
 	if o.HTTP != nil {
 		return o.HTTP
 	}
-	// The public geoservices can take >30s to first byte when cold.
+	// Backstop only: each attempt is time-boxed by perAttemptTimeout (a shorter
+	// sub-context in fetch), so this client-level ceiling should never fire first.
 	return &http.Client{Timeout: 60 * time.Second}
 }
+
+// Live-fetch retry budget. The public geoservices are slow when cold and, when
+// overloaded, will complete the TLS handshake but never send an HTTP response —
+// a connection that just hangs. So each attempt is independently time-boxed
+// (perAttemptTimeout) and abandoned rather than allowed to consume the whole
+// request budget: a fresh retry may land on a healthy worker. Retries stop only
+// when the parent budget is spent or the failure is non-transient (a 4xx).
+const maxFetchAttempts = 4
+
+// perAttemptTimeout is a var (not const) so tests can shrink the attempt window.
+var perAttemptTimeout = 45 * time.Second
 
 const userAgent = "pdm/0.1 (+https://github.com/bernardosimoes/pdm) planning-data-query"
 
@@ -291,7 +305,11 @@ func fetch(ctx context.Context, opts Options, reqURL string) ([]byte, time.Time,
 		}
 	}
 	var lastErr error
-	for attempt := 0; attempt < 3; attempt++ {
+	attempts := maxFetchAttempts
+	if opts.MaxAttempts > 0 {
+		attempts = opts.MaxAttempts
+	}
+	for attempt := 0; attempt < attempts; attempt++ {
 		if attempt > 0 {
 			select {
 			case <-ctx.Done():
@@ -299,11 +317,24 @@ func fetch(ctx context.Context, opts Options, reqURL string) ([]byte, time.Time,
 			case <-time.After(time.Duration(attempt) * 2 * time.Second):
 			}
 		}
-		body, retryable, err := fetchOnce(ctx, opts, reqURL)
+		// Time-box the attempt without exceeding the remaining parent budget
+		// (WithTimeout keeps the earlier of the two deadlines), so a hung backend
+		// is dropped and retried instead of blocking the whole query on one call.
+		timeout := perAttemptTimeout
+		if opts.AttemptTimeout > 0 {
+			timeout = opts.AttemptTimeout
+		}
+		attemptCtx, cancel := context.WithTimeout(ctx, timeout)
+		body, retryable, err := fetchOnce(attemptCtx, opts, reqURL)
+		cancel()
 		if err == nil {
 			return body, timeNow(), false, nil
 		}
 		lastErr = err
+		if ctx.Err() != nil {
+			// The whole request budget is spent — surface the clean deadline error.
+			return nil, time.Time{}, false, ctx.Err()
+		}
 		if !retryable {
 			break
 		}
@@ -322,12 +353,15 @@ func fetchOnce(ctx context.Context, opts Options, reqURL string) (body []byte, r
 	req.Header.Set("Accept", "application/json, application/geo+json")
 	resp, err := opts.client().Do(req)
 	if err != nil {
-		return nil, ctx.Err() == nil, fmt.Errorf("GET %s: %w", trim(reqURL), err)
+		// Network error or an attempt that timed out (including a backend that
+		// accepts the connection but never answers). Transient as a class; whether
+		// to actually retry is fetch's call, based on the remaining parent budget.
+		return nil, true, fmt.Errorf("GET %s: %w", trim(reqURL), err)
 	}
 	defer resp.Body.Close()
 	body, err = io.ReadAll(io.LimitReader(resp.Body, 64<<20))
 	if err != nil {
-		return nil, ctx.Err() == nil, err
+		return nil, true, fmt.Errorf("GET %s: %w", trim(reqURL), err)
 	}
 	if resp.StatusCode != http.StatusOK {
 		transient := resp.StatusCode >= 500 || resp.StatusCode == http.StatusTooManyRequests

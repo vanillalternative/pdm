@@ -54,3 +54,10 @@ func TestSupportedContainsTomar(t *testing.T) {
 		t.Errorf("Supported() should list Tomar, got %v", Supported())
 	}
 }
+
+func TestMafraHasDedicatedAdapter(t *testing.T) {
+	a, dedicated := Resolve("Mafra", "1109")
+	if !dedicated || a.Municipality() != "Mafra" {
+		t.Fatalf("Mafra should resolve to its dedicated adapter, got %q/%v", a.Municipality(), dedicated)
+	}
+}

@@ -154,9 +154,9 @@ func AnalysisHTML(w io.Writer, v AnalysisView, a *ai.Analysis, gaps []string, ma
 			if c.Present {
 				extra = fmt.Sprintf("%s m² · %s%%", area(c.AreaM2), pct(c.Percent))
 			}
-			chip(b, c.Type, c.Present, "", extra)
+			chipHit(b, c, extra)
 		} else {
-			chip(b, c.Type, c.Present, c.Detail, "")
+			chipHit(b, c, "")
 		}
 	}
 	b.WriteString(`</div></section>`)

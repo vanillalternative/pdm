@@ -30,25 +30,44 @@ Câmara (RJUE) — automated data gets you most of the way, never the certificat
 
 ## Status
 
-**All mainland municipalities are supported for zoning and the national
-constraints.** Any coordinate/parcel in continental Portugal resolves to its
-municipality and freguesia (bundled CAOP boundaries), gets its zoning from the
-national **DGT CRUS** dataset — the harmonised carta of every municipality's
-plans in force — and is checked against the national **DGT SRUP** servidões:
-**Rede Natura 2000** (ZPE and ZEC) and the **rural fire hazard** chart
-(perigosidade de incêndio rural, high classes only, which are the ones that
-restrict building). All fetched live (bbox-filtered) and cached.
+**All mainland municipalities are supported for zoning.** Any coordinate/parcel
+in continental Portugal resolves to its municipality and freguesia (bundled
+CAOP boundaries) and gets its zoning from the national **DGT CRUS** dataset —
+the harmonised carta of every municipality's plans in force — fetched live
+(bbox-filtered) and cached.
 
-Two support levels:
+**All mainland municipalities also get the national constraint layers**,
+evaluated as server-side presence probes (the underlying polygons — whole-
+municipality REN delimitations, whole-park boundaries — are far too large to
+download per query, so the services are asked what intersects the subject and
+only attributes come back):
 
-- **Full** (dedicated adapter): the above **+ municipal constraint layers +
-  Regulamento articles**. Pilot: **Tomar** (concelho 1418).
-- **National-data-only** (generic adapter): every other mainland municipality.
-  The municipal constraint layers (RAN, REN, servidões locais — e.g. Tomar's
-  Albufeira de Castelo de Bode/POACB) and the written regulation are
-  municipality-specific work and are added one municipality at a time; until
-  then results carry an explicit note and are capped at **low confidence** —
-  the absence of a constraint in the output does not mean it doesn't exist.
+- **RAN** and **REN** from DGT/SNIT SRUP (REN exclusion polygons are
+  subtracted; municipalities missing from the national dataset answer
+  **unknown**, never "no" — ~50 lack their REN in SNIT, 6 lack a published RAN,
+  and Lisboa/Porto/Amadora genuinely have no RAN);
+- **Rede Natura 2000** (ZEC + ZPE) and **áreas protegidas (RNAP)** from the
+  same catalogue;
+- **albufeiras classificadas** (in-water and the statutory DL 107/2009
+  protection belt, via true server-side distance queries) and the coastal
+  **POC/POOC** areas, safeguard strips, digitized **POAAP** zonings and
+  **PAAP** areas from APA/SNIAmb ArcGIS services.
+
+On top of the live layers, every result lists the **special planning
+instruments** (planos/programas especiais — POAAP/PEAAP, POOC/POC, POE,
+POAP/PEAP) touching the municipality, from a bundled registry of ~121
+instruments compiled from the official APA/ICNF/DGT/DRE registries (statuses
+as of July 2026), with a positive "the queried location falls inside its area"
+marker whenever a live layer confirms it.
+
+Two support levels remain:
+
+- **Full** (dedicated adapter): bundled snapshot layers **+ Regulamento
+  articles**. Pilot: **Tomar** (concelho 1418).
+- **Generic**: every other mainland municipality — live CRUS zoning + the
+  national constraint layers above, at **medium confidence**, with an explicit
+  note that municipality-specific condicionantes and the written regulation are
+  not yet integrated.
 
 The Azores and Madeira are not yet covered: the mainland DGT datasets
 (CAOP/CRUS) exclude them, and the regional services are not yet integrated
@@ -60,7 +79,7 @@ The Azores and Madeira are not yet covered: the mainland DGT datasets
 go build -o pdm ./cmd/pdm
 ```
 
-Requires Go 1.24+. There is no CGo dependency; all geometry and the coordinate
+Requires Go 1.26+. There is no CGo dependency; all geometry and the coordinate
 projection are pure Go.
 
 ## Usage
@@ -72,6 +91,8 @@ pdm polygon <file.geojson>      query a parcel polygon
 pdm report <file.geojson|lat lon> [--format ...]   full report
 pdm analyse <file.geojson|lat lon> [--tier ...]    AI-written analysis report
 pdm supported                   show municipality coverage/support levels
+pdm municipalities              list every municipality as JSON (name, code,
+                                district, centroid, bbox, regulamento, plans)
 pdm version
 pdm help
 ```

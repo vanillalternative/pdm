@@ -6,12 +6,9 @@
 package tomar
 
 import (
-	"sync"
-
 	"github.com/bernardosimoes/pdm/data"
 	"github.com/bernardosimoes/pdm/internal/adapter"
 	"github.com/bernardosimoes/pdm/internal/adapter/crus"
-	"github.com/bernardosimoes/pdm/internal/adapter/srup"
 	"github.com/bernardosimoes/pdm/internal/model"
 	"github.com/bernardosimoes/pdm/internal/reg"
 	"github.com/bernardosimoes/pdm/internal/source"
@@ -31,20 +28,10 @@ func New() *Adapter { return &Adapter{} }
 
 func (a *Adapter) Municipality() string { return "Tomar" }
 
-var (
-	regOnce  sync.Once
-	regStore *reg.Store
-)
-
-// Regulation loads (once) the parsed PDM de Tomar Regulamento.
-func (a *Adapter) Regulation() *reg.Store {
-	regOnce.Do(func() {
-		if s, err := reg.Load(data.TomarRegulamento); err == nil {
-			regStore = s
-		}
-	})
-	return regStore
-}
+// Regulation returns nil: Tomar's parsed regulamento is served data-driven from
+// the shared regstore (data/regulamentos/1418.json), keyed by its dtcc code, so
+// there is a single path for every municipality's regulation.
+func (a *Adapter) Regulation() *reg.Store { return nil }
 
 func (a *Adapter) BaseConfidence() model.Confidence {
 	// Zoning and RAN come from the national DGT datasets (CRUS/SRUP); REN from
@@ -121,11 +108,6 @@ func (a *Adapter) Layers(opts source.Options) []adapter.Layer {
 			Loader:     source.Bundled(data.TomarPOACB, bundledMeta("Município de Tomar (MuniSIG) — POACB", "poacb")),
 			Detail:     func(f spatial.Feature) string { return f.Prop("designacao", "servidao") },
 		},
-	}
-	if opts.Live {
-		// National SRUP constraints (Natura 2000, fire hazard) have no bundled
-		// snapshot, so they join only in live mode — offline stays offline.
-		layers = append(layers, srup.Layers(opts)...)
 	}
 	return layers
 }

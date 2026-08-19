@@ -5,6 +5,7 @@ package admin
 
 import (
 	"fmt"
+	"sort"
 
 	"github.com/bernardosimoes/pdm/internal/crs"
 	"github.com/bernardosimoes/pdm/internal/spatial"
@@ -60,6 +61,30 @@ func municipality(f spatial.Feature) Municipality {
 		m.Name = "(unknown municipality)"
 	}
 	return m
+}
+
+// Info is Municipality plus geometry-derived data for listings/pages.
+type Info struct {
+	Municipality
+	CentroidLon, CentroidLat float64
+	BBox                     [4]float64 // minLon, minLat, maxLon, maxLat (WGS84)
+}
+
+// List returns every municipality in the boundary dataset, code-ordered.
+func (r *Resolver) List() []Info {
+	out := make([]Info, 0, len(r.features))
+	for _, f := range r.features {
+		info := Info{Municipality: municipality(f)}
+		if xy, ok := f.Geometry.Centroid().XY(); ok {
+			info.CentroidLon, info.CentroidLat = xy.X, xy.Y
+		}
+		if min, max, ok := f.Geometry.Envelope().MinMaxXYs(); ok {
+			info.BBox = [4]float64{min.X, min.Y, max.X, max.Y}
+		}
+		out = append(out, info)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Code < out[j].Code })
+	return out
 }
 
 // ResolvePoint returns the municipality containing the point, or ok=false if

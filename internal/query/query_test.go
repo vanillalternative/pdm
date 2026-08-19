@@ -6,7 +6,9 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/bernardosimoes/pdm/data"
 	"github.com/bernardosimoes/pdm/internal/admin"
@@ -22,6 +24,17 @@ func newEngine(t *testing.T) *query.Engine {
 	t.Helper()
 	// Tests must stay offline: any unexpected live fetch fails loudly.
 	return newEngineOpts(t, source.Options{Live: false, HTTP: errClient(fmt.Errorf("network use in offline test"))})
+}
+
+// shortCtx bounds a test query so the fetch retry backoff (2s+4s per probe)
+// does not stall offline tests: the first attempt of every fetch still runs
+// (and fails loudly through the stub), only the retry sleeps are cut short.
+// Bundled layers never touch the network, so they are unaffected.
+func shortCtx(t *testing.T) context.Context {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 250*time.Millisecond)
+	t.Cleanup(cancel)
+	return ctx
 }
 
 func newEngineOpts(t *testing.T, opts source.Options) *query.Engine {
@@ -58,21 +71,29 @@ func jsonClient(t *testing.T, body string, sawURL *string) *http.Client {
 	})}
 }
 
-const emptyFC = `{"type":"FeatureCollection","features":[]}`
+// emptyFC is what national services answer when nothing intersects the probe.
+const emptyFC = `{"type":"FeatureCollection","numberMatched":0,"features":[]}`
 
-// routedClient answers each request with the body whose key is a substring of
-// the URL (empty FeatureCollection otherwise), recording seen URLs.
-func routedClient(t *testing.T, routes map[string]string, sawURLs *[]string) *http.Client {
+// stubRoute maps a URL substring to a canned body; first match wins.
+type stubRoute struct{ sub, body string }
+
+// stubClient answers each request with the first route whose substring matches
+// the URL (empty FeatureCollection otherwise) and records all URLs seen.
+// Layers are evaluated concurrently, so recording is mutex-guarded.
+func stubClient(t *testing.T, seen *[]string, routes []stubRoute) *http.Client {
 	t.Helper()
+	var mu sync.Mutex
 	return &http.Client{Transport: rtFunc(func(r *http.Request) (*http.Response, error) {
 		u := r.URL.String()
-		if sawURLs != nil {
-			*sawURLs = append(*sawURLs, u)
+		if seen != nil {
+			mu.Lock()
+			*seen = append(*seen, u)
+			mu.Unlock()
 		}
 		body := emptyFC
-		for sub, b := range routes {
-			if strings.Contains(u, sub) {
-				body = b
+		for _, rt := range routes {
+			if strings.Contains(u, rt.sub) {
+				body = rt.body
 				break
 			}
 		}
@@ -84,8 +105,21 @@ func routedClient(t *testing.T, routes map[string]string, sawURLs *[]string) *ht
 	})}
 }
 
+// genericRoutes are the stubbed national services for the Ourém tests: CRUS
+// zoning plus RAN/REN existence checks that confirm the municipality has data,
+// with every probe answering "nothing here".
+func genericRoutes() []stubRoute {
+	return []stubRoute{
+		{"collections/crus/items", ouremCRUS},
+		// Existence checks (attribute-only, no bbox) confirm data exists…
+		{"srup_ran/items?f=json&limit=1&municipio=OUR", `{"numberMatched":1,"features":[{"type":"Feature","properties":{"municipio":"OURÉM"}}]}`},
+		{"srup_ren_areal/items?dtcc=1421&f=json&limit=1", `{"numberMatched":1,"features":[{"type":"Feature","properties":{"dtcc":"1421"}}]}`},
+		// …and the bbox probes find nothing at the point (default emptyFC).
+	}
+}
+
 func TestPointTomarCentre(t *testing.T) {
-	res, err := newEngine(t).Point(context.Background(), -8.41, 39.60)
+	res, err := newEngine(t).Point(shortCtx(t), -8.41, 39.60)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -120,7 +154,7 @@ func TestPointTomarCentre(t *testing.T) {
 func TestPOACBConstraint(t *testing.T) {
 	eng := newEngine(t)
 	// Inside the Área de Intervenção do POACB (Albufeira de Castelo de Bode).
-	in, err := eng.Point(context.Background(), -8.32522, 39.54334)
+	in, err := eng.Point(shortCtx(t), -8.32522, 39.54334)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -128,7 +162,7 @@ func TestPOACBConstraint(t *testing.T) {
 		t.Errorf("expected POACB present at interior point, got %+v", c)
 	}
 	// Just outside it (~500 m).
-	out, err := eng.Point(context.Background(), -8.27746, 39.58687)
+	out, err := eng.Point(shortCtx(t), -8.27746, 39.58687)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -144,15 +178,14 @@ const ouremCRUS = `{"type":"FeatureCollection","features":[{"type":"Feature","pr
 "dtcc":"1421","municipio":"OURÉM","codigo":21,"situacao_pdm":"Vigente"},
 "geometry":{"type":"Polygon","coordinates":[[[-8.7,39.6],[-8.5,39.6],[-8.5,39.76],[-8.7,39.76],[-8.7,39.6]]]}}]}`
 
-// TestPointGenericMunicipality: a municipality without a dedicated adapter is
-// served by the generic adapter — zoning from CRUS plus the national SRUP
-// constraints, all fetched live, capped at low confidence, and honestly
-// annotated.
-func TestPointGenericMunicipality(t *testing.T) {
-	var sawURLs []string
+// TestPointOuremCRUSFallback: with live municipal WebSIG disabled, Ourém's
+// dedicated adapter still falls back to CRUS for zoning plus the national
+// constraint layers.
+func TestPointOuremCRUSFallback(t *testing.T) {
+	var seen []string
 	// Live=false on purpose: the generic adapter must fetch live regardless,
 	// because no bundled snapshot exists for it.
-	eng := newEngineOpts(t, source.Options{Live: false, HTTP: routedClient(t, map[string]string{"collections/crus/": ouremCRUS}, &sawURLs)})
+	eng := newEngineOpts(t, source.Options{Live: false, HTTP: stubClient(t, &seen, genericRoutes())})
 	res, err := eng.Point(context.Background(), -8.60, 39.68) // Ourém
 	if err != nil {
 		t.Fatal(err)
@@ -163,81 +196,159 @@ func TestPointGenericMunicipality(t *testing.T) {
 	if len(res.Zoning) != 1 || res.Zoning[0].Label != "Solo Rústico - Espaços Agrícolas" {
 		t.Errorf("unexpected zoning: %+v", res.Zoning)
 	}
-	// National SRUP constraints are evaluated (absent here — empty stub).
-	if len(res.Constraints) != 3 {
-		t.Fatalf("expected the 3 national SRUP constraints, got %+v", res.Constraints)
+	// The national constraint layers are evaluated for every municipality now.
+	if len(res.Constraints) < 8 {
+		t.Fatalf("expected the national constraint layers, got %d: %+v", len(res.Constraints), res.Constraints)
 	}
-	for _, c := range res.Constraints {
-		if c.Present {
-			t.Errorf("constraint %s should be absent with empty stub data", c.Type)
+	for _, typ := range []string{"RAN", "REN"} {
+		c := findConstraint(res.Constraints, typ)
+		if c == nil || c.Present || c.Unknown {
+			t.Errorf("expected %s absent (data exists, point outside), got %+v", typ, c)
 		}
 	}
 	if res.Regulation != nil {
-		t.Error("generic adapter must not attach regulation")
+		t.Error("Ourém adapter must not attach regulation until its regulamento is parsed")
 	}
-	if res.Confidence != model.ConfidenceLow {
-		t.Errorf("generic result should be low confidence, got %s", res.Confidence)
+	if res.Confidence != model.ConfidenceMedium {
+		t.Errorf("expected medium confidence, got %s", res.Confidence)
 	}
-	if !hasNoteContaining(res.Notes, "not yet integrated") {
-		t.Errorf("expected zoning-only caveat note, got %v", res.Notes)
+	if hasNoteContaining(res.Notes, "no dedicated adapter") {
+		t.Errorf("Ourém should now resolve through a dedicated adapter, got notes %v", res.Notes)
 	}
-	joined := strings.Join(sawURLs, "\n")
-	if !strings.Contains(joined, "collections/crus/items") || !strings.Contains(joined, "dtcc=1421") {
-		t.Errorf("expected CRUS fetch filtered by dtcc, got %s", joined)
+	if !sawURLContaining(seen, "collections/crus/items", "dtcc=1421") {
+		t.Errorf("expected CRUS fetch filtered by dtcc, got %v", seen)
 	}
-	for _, coll := range []string{"srup_zpe", "srup_zec", "srup_perigosidade_inc_rural"} {
-		if !strings.Contains(joined, coll) {
-			t.Errorf("expected a %s fetch, got %s", coll, joined)
-		}
+	// The registry attaches Ourém's special instruments (it is a PEPNSAC
+	// municipality); nothing confirmed the point inside, so PointInside is nil.
+	ins := findInstrumentContaining(res.Instruments, "Serras de Aire e Candeeiros")
+	if ins == nil {
+		t.Fatalf("expected PEPNSAC in Ourém's instruments, got %+v", res.Instruments)
+	}
+	if ins.PointInside != nil {
+		t.Errorf("no layer confirmed the point inside PEPNSAC, got %v", *ins.PointInside)
 	}
 	if len(res.Sources) == 0 || res.Sources[0].Provenance != model.ProvenanceOfficialLive {
 		t.Errorf("expected official-live source, got %+v", res.Sources)
 	}
 }
 
-// ouremZEC is a canned ZEC polygon covering the Ourém test point; ouremFire is
-// a fire-hazard response mixing a low class (must be ignored) and a high class
-// polygon that does NOT cover the test point.
-const ouremZEC = `{"type":"FeatureCollection","features":[{"type":"Feature","properties":{
-"designacao":"SICÓ/ALVAIÁZERE","servidao":"REDE NATURA 2000 - ZONAS ESPECIAIS DE CONSERVAÇÃO"},
-"geometry":{"type":"Polygon","coordinates":[[[-8.7,39.6],[-8.5,39.6],[-8.5,39.76],[-8.7,39.76],[-8.7,39.6]]]}}]}`
-
-const ouremFire = `{"type":"FeatureCollection","features":[
-{"type":"Feature","properties":{"tipologia":"Baixa"},
-"geometry":{"type":"Polygon","coordinates":[[[-8.7,39.6],[-8.5,39.6],[-8.5,39.76],[-8.7,39.76],[-8.7,39.6]]]}},
-{"type":"Feature","properties":{"tipologia":"Muito Alta"},
-"geometry":{"type":"Polygon","coordinates":[[[-8.62,39.70],[-8.61,39.70],[-8.61,39.71],[-8.62,39.71],[-8.62,39.70]]]}}]}`
-
-// TestPointGenericNationalConstraints: the SRUP layers mark presence and carry
-// details, and the fire-hazard layer ignores the non-restrictive classes.
-func TestPointGenericNationalConstraints(t *testing.T) {
-	eng := newEngineOpts(t, source.Options{Live: false, HTTP: routedClient(t, map[string]string{
-		"collections/crus/":           ouremCRUS,
-		"srup_zec":                    ouremZEC,
-		"srup_perigosidade_inc_rural": ouremFire,
-	}, nil)})
-	res, err := eng.Point(context.Background(), -8.60, 39.68) // Ourém
+// TestNationalRENExclusion: a point inside an exclusion polygon is OUT of the
+// REN. In the national data the delimitation multipolygon has the exclusion
+// areas carved out geometrically, so such a point hits ONLY the exclusion
+// feature (verified live against Tomar's city centre).
+func TestNationalRENExclusion(t *testing.T) {
+	routes := append([]stubRoute{
+		{"srup_ren_areal/items?bbox", `{"numberMatched":1,"features":[
+			{"type":"Feature","properties":{"tipologia":"Exclusões","designacao":"DELIMITAÇÃO DA REN DO CONCELHO - OURÉM"}}]}`},
+	}, genericRoutes()...)
+	eng := newEngineOpts(t, source.Options{Live: false, HTTP: stubClient(t, nil, routes)})
+	res, err := eng.Point(context.Background(), -8.60, 39.68)
 	if err != nil {
 		t.Fatal(err)
 	}
-	zec := findConstraint(res.Constraints, "Natura 2000 — ZEC")
-	if zec == nil || !zec.Present || zec.Detail != "SICÓ/ALVAIÁZERE" {
-		t.Errorf("expected ZEC present with designação, got %+v", zec)
+	ren := findConstraint(res.Constraints, "REN")
+	if ren == nil || ren.Present || ren.Unknown {
+		t.Fatalf("point in an exclusion area must not be REN-present, got %+v", ren)
 	}
-	if zpe := findConstraint(res.Constraints, "Natura 2000 — ZPE"); zpe == nil || zpe.Present {
-		t.Errorf("expected ZPE absent (empty stub), got %+v", zpe)
+	if !strings.Contains(strings.ToLower(ren.Detail), "exclus") {
+		t.Errorf("expected exclusion detail, got %q", ren.Detail)
 	}
-	// The point sits inside the "Baixa" polygon (filtered out) and outside the
-	// "Muito Alta" one — the constraint must be absent.
-	if fire := findConstraint(res.Constraints, "Perigosidade de incêndio rural"); fire == nil || fire.Present {
-		t.Errorf("expected fire hazard absent (only high classes count), got %+v", fire)
+}
+
+// TestNationalRENStraddle: a subject envelope hitting BOTH the delimitation and
+// an exclusion straddles the boundary (a parcel, or a point on the line) —
+// part of it is in the REN, so the honest answer is present, flagged partial.
+func TestNationalRENStraddle(t *testing.T) {
+	routes := append([]stubRoute{
+		{"srup_ren_areal/items?bbox", `{"numberMatched":2,"features":[
+			{"type":"Feature","properties":{"tipologia":"Reserva Ecológica Nacional","designacao":"DELIMITAÇÃO DA REN DO CONCELHO - OURÉM","serv_lei":"AVISO X/2024"}},
+			{"type":"Feature","properties":{"tipologia":"Exclusões","designacao":"DELIMITAÇÃO DA REN DO CONCELHO - OURÉM"}}]}`},
+	}, genericRoutes()...)
+	eng := newEngineOpts(t, source.Options{Live: false, HTTP: stubClient(t, nil, routes)})
+	res, err := eng.Polygon(context.Background(), squareAround(t, -8.60, 39.68, 0.001))
+	if err != nil {
+		t.Fatal(err)
 	}
+	ren := findConstraint(res.Constraints, "REN")
+	if ren == nil || !ren.Present || ren.Unknown {
+		t.Fatalf("a parcel straddling delimitation+exclusion is partially in REN, got %+v", ren)
+	}
+	if !strings.Contains(strings.ToLower(ren.Detail), "parcial") {
+		t.Errorf("expected partial-coverage detail, got %q", ren.Detail)
+	}
+}
+
+// TestNationalRANUnknown: a municipality absent from the national RAN dataset
+// must answer "unknown", never "no".
+func TestNationalRANUnknown(t *testing.T) {
+	// No srup_ran existence route: the existence check returns numberMatched 0.
+	routes := []stubRoute{
+		{"collections/crus/items", ouremCRUS},
+		{"srup_ren_areal/items?dtcc=1421&f=json&limit=1", `{"numberMatched":1,"features":[]}`},
+	}
+	eng := newEngineOpts(t, source.Options{Live: false, HTTP: stubClient(t, nil, routes)})
+	res, err := eng.Point(context.Background(), -8.60, 39.68)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ran := findConstraint(res.Constraints, "RAN")
+	if ran == nil || !ran.Unknown || ran.Present {
+		t.Fatalf("expected RAN unknown for a municipality missing from the dataset, got %+v", ran)
+	}
+	if ran.Note == "" {
+		t.Error("an unknown answer must carry the data-gap note")
+	}
+	// A data gap is a reason to trust the overall result less.
+	if res.Confidence != model.ConfidenceLow {
+		t.Errorf("expected downgraded confidence on data gap, got %s", res.Confidence)
+	}
+}
+
+// TestInstrumentsPOACBInside: at a point inside the bundled POACB area, the
+// registry instrument for the Castelo do Bode plan is confirmed PointInside.
+func TestInstrumentsPOACBInside(t *testing.T) {
+	res, err := newEngine(t).Point(shortCtx(t), -8.32522, 39.54334)
+	if err != nil {
+		t.Fatal(err)
+	}
+	poacb := findInstrumentContaining(res.Instruments, "POACB")
+	if poacb == nil {
+		t.Fatalf("expected POACB in Tomar's instruments, got %+v", res.Instruments)
+	}
+	if poacb.PointInside == nil || !*poacb.PointInside {
+		t.Errorf("expected POACB confirmed at an interior point, got %+v", poacb.PointInside)
+	}
+}
+
+func sawURLContaining(seen []string, subs ...string) bool {
+	for _, u := range seen {
+		ok := true
+		for _, s := range subs {
+			if !strings.Contains(u, s) {
+				ok = false
+				break
+			}
+		}
+		if ok {
+			return true
+		}
+	}
+	return false
+}
+
+func findInstrumentContaining(ins []model.Instrument, sub string) *model.Instrument {
+	for i := range ins {
+		if strings.Contains(ins[i].Name, sub) {
+			return &ins[i]
+		}
+	}
+	return nil
 }
 
 // TestPointGenericOffline: with no network, a generic municipality still
 // resolves and reports honestly that the zoning layer was unavailable.
 func TestPointGenericOffline(t *testing.T) {
-	res, err := newEngine(t).Point(context.Background(), -8.60, 39.68) // Ourém
+	res, err := newEngine(t).Point(shortCtx(t), -8.60, 39.68) // Ourém
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -263,7 +374,7 @@ func TestPointAutonomousRegions(t *testing.T) {
 		"Azores":  {-25.67, 37.74}, // Ponta Delgada
 	}
 	for region, c := range cases {
-		res, err := newEngine(t).Point(context.Background(), c[0], c[1])
+		res, err := newEngine(t).Point(shortCtx(t), c[0], c[1])
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -297,11 +408,10 @@ func squareAround(t *testing.T, lon, lat, half float64) geom.Geometry {
 	return g
 }
 
-// TestPolygonGenericMunicipality: the parcel path through the generic adapter —
-// zoning breakdown from a live CRUS fetch, national constraints evaluated
-// (absent with empty stubs), caveat note.
-func TestPolygonGenericMunicipality(t *testing.T) {
-	eng := newEngineOpts(t, source.Options{Live: false, HTTP: routedClient(t, map[string]string{"collections/crus/": ouremCRUS}, nil)})
+// TestPolygonOuremCRUSFallback: the parcel path uses CRUS geometry when live
+// municipal WebSIG layers are disabled.
+func TestPolygonOuremCRUSFallback(t *testing.T) {
+	eng := newEngineOpts(t, source.Options{Live: false, HTTP: stubClient(t, nil, genericRoutes())})
 	g := squareAround(t, -8.60, 39.68, 0.001) // inside Ourém and the stub zoning polygon
 	res, err := eng.Polygon(context.Background(), g)
 	if err != nil {
@@ -316,26 +426,25 @@ func TestPolygonGenericMunicipality(t *testing.T) {
 	if res.Zoning[0].Percent < 99 || res.Zoning[0].Percent > 100.5 {
 		t.Errorf("parcel fully inside the zoning polygon should be ~100%%, got %.1f", res.Zoning[0].Percent)
 	}
-	if len(res.Constraints) != 3 {
-		t.Fatalf("expected the 3 national SRUP constraints, got %+v", res.Constraints)
+	ran := findConstraint(res.Constraints, "RAN")
+	if ran == nil || ran.Present || ran.Unknown {
+		t.Fatalf("expected RAN absent, got %+v", ran)
 	}
-	for _, c := range res.Constraints {
-		if c.Present {
-			t.Errorf("constraint %s should be absent with empty stub data", c.Type)
-		}
+	if !strings.Contains(ran.Note, "envelope") {
+		t.Errorf("polygon probes must carry the envelope-approximation note, got %q", ran.Note)
 	}
-	if !hasNoteContaining(res.Notes, "not yet integrated") {
-		t.Errorf("expected zoning-only caveat note, got %v", res.Notes)
+	if hasNoteContaining(res.Notes, "no dedicated adapter") {
+		t.Errorf("Ourém should now resolve through a dedicated adapter, got notes %v", res.Notes)
 	}
-	if res.Confidence != model.ConfidenceLow {
-		t.Errorf("expected low confidence, got %s", res.Confidence)
+	if res.Confidence != model.ConfidenceMedium {
+		t.Errorf("expected medium confidence, got %s", res.Confidence)
 	}
 }
 
 // TestPolygonAutonomousRegion: a parcel in Madeira resolves to no municipality
 // but keeps its area and explains why.
 func TestPolygonAutonomousRegion(t *testing.T) {
-	res, err := newEngine(t).Polygon(context.Background(), squareAround(t, -16.92, 32.65, 0.001))
+	res, err := newEngine(t).Polygon(shortCtx(t), squareAround(t, -16.92, 32.65, 0.001))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -350,13 +459,13 @@ func TestPolygonAutonomousRegion(t *testing.T) {
 	}
 }
 
-// TestMapsGenericMunicipality: the map builders must render for generic
-// municipalities (they used to return nil for anything but Tomar).
-func TestMapsGenericMunicipality(t *testing.T) {
-	eng := newEngineOpts(t, source.Options{Live: false, HTTP: routedClient(t, map[string]string{"collections/crus/": ouremCRUS}, nil)})
+// TestMapsOuremCRUSFallback: the map builders still render from CRUS when live
+// municipal WebSIG layers are disabled.
+func TestMapsOuremCRUSFallback(t *testing.T) {
+	eng := newEngineOpts(t, source.Options{Live: false, HTTP: jsonClient(t, ouremCRUS, nil)})
 	pm := eng.PointMap(context.Background(), -8.60, 39.68)
 	if pm == nil {
-		t.Fatal("PointMap should render for a generic municipality")
+		t.Fatal("PointMap should render for Ourém")
 	}
 	if !hasMapLayer(pm.Layers, "boundary") || !hasMapLayer(pm.Layers, "zoning") {
 		t.Errorf("expected boundary+zoning map layers, got %+v", layerIDs(pm.Layers))
@@ -367,6 +476,46 @@ func TestMapsGenericMunicipality(t *testing.T) {
 	}
 	if !hasMapLayer(gm.Layers, "zoning") {
 		t.Errorf("expected zoning map layer, got %+v", layerIDs(gm.Layers))
+	}
+}
+
+func TestPointStreamReusesZoningForMap(t *testing.T) {
+	var seen []string
+	eng := newEngineOpts(t, source.Options{Live: false, HTTP: stubClient(t, &seen, genericRoutes())})
+	var mu sync.Mutex
+	var maps []query.MapEvent
+	var zoningLayers []query.LayerEvent
+	_, err := eng.PointStream(context.Background(), -8.60, 39.68, func(v any) {
+		switch ev := v.(type) {
+		case query.MapEvent:
+			mu.Lock()
+			maps = append(maps, ev)
+			mu.Unlock()
+		case query.LayerEvent:
+			if ev.ID == "ordenamento" {
+				mu.Lock()
+				zoningLayers = append(zoningLayers, ev)
+				mu.Unlock()
+			}
+		}
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(maps) != 1 || !strings.Contains(maps[0].HTML, `data-role="zoning"`) {
+		t.Fatalf("expected one streamed locator map with zoning, got %+v", maps)
+	}
+	if len(zoningLayers) != 1 || zoningLayers[0].ZoningGeoJSON == nil {
+		t.Fatalf("expected one zoning layer event with GeoJSON, got %+v", zoningLayers)
+	}
+	crusRequests := 0
+	for _, u := range seen {
+		if strings.Contains(u, "collections/crus/items") {
+			crusRequests++
+		}
+	}
+	if crusRequests != 1 {
+		t.Fatalf("expected the streamed query and map to share one CRUS request, got %d: %v", crusRequests, seen)
 	}
 }
 
@@ -392,7 +541,7 @@ func TestPolygonBreakdown(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	res, err := newEngine(t).Polygon(context.Background(), g)
+	res, err := newEngine(t).Polygon(shortCtx(t), g)
 	if err != nil {
 		t.Fatal(err)
 	}

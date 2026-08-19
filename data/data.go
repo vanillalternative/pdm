@@ -4,7 +4,7 @@
 // deterministically; live official sources can override it at runtime.
 package data
 
-import _ "embed"
+import "embed"
 
 // Municipalities holds administrative boundaries for municipality resolution.
 //
@@ -32,8 +32,21 @@ var (
 	TomarPOACB []byte
 )
 
-// TomarRegulamento holds the PDM de Tomar written regulation, parsed into
+// Regulamentos holds the bundled PDM written regulations (Regulamentos), one
+// data/regulamentos/<dtcc>.json per covered municipality, each parsed into
 // articles with section context (retrieval only — the tool does not interpret).
+// index.json is the coverage manifest and visits.json the demand-ranking
+// snapshot maintained by the fetch-regulamentos skill; both are ignored by the
+// regulation loader, which keys stores by the <dtcc> filename.
 //
-//go:embed tomar/regulamento.json
-var TomarRegulamento []byte
+//go:embed regulamentos/*.json
+var Regulamentos embed.FS
+
+// Planos holds the national registry of special planning instruments (planos/
+// programas especiais — albufeiras, orla costeira, estuários, áreas
+// protegidas): every instrument ever approved or in the pipeline, its diploma,
+// status and the municipalities it touches. Compiled from the official APA,
+// ICNF, DGT/PCGT and DRE registries (verified July 2026).
+//
+//go:embed planos.json
+var Planos []byte

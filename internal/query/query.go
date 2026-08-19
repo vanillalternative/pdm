@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/bernardosimoes/pdm/internal/adapter"
+	"github.com/bernardosimoes/pdm/internal/adapter/srup"
 	"github.com/bernardosimoes/pdm/internal/admin"
 	"github.com/bernardosimoes/pdm/internal/crs"
 	"github.com/bernardosimoes/pdm/internal/mapview"
@@ -531,6 +532,18 @@ func composeLayers(ad adapter.Adapter, name, code string, opts source.Options) [
 		if l.Constraint != "" {
 			skip[l.Constraint] = true
 		}
+	}
+	// National SRUP geometry layers (Rede Natura 2000 ZPE/ZEC, rural fire
+	// hazard) come before the probes: geometry yields real overlap area and
+	// percentages, so where both exist the geometry layer wins and the
+	// equivalent probe is skipped. The probes then fill in everything else
+	// (RAN, REN, protected areas, albufeiras, coastal instruments).
+	for _, l := range srup.Layers(opts) {
+		if skip[l.Constraint] {
+			continue
+		}
+		skip[l.Constraint] = true
+		layers = append(layers, l)
 	}
 	return append(layers, national.Layers(name, code, opts, skip)...)
 }

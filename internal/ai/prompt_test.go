@@ -17,7 +17,7 @@ func fixtureResult() *model.PointResult {
 		Constraints: []model.ConstraintHit{
 			{Type: "RAN", Label: "Reserva Agrícola Nacional", Present: false, Layer: "ran"},
 			{Type: "REN", Label: "Reserva Ecológica Nacional", Present: true, Layer: "ren"},
-			{Type: "Natura 2000 — ZEC", Label: "Rede Natura 2000 — ZEC", Present: false, Layer: "zec"},
+			{Type: "Rede Natura 2000 (ZEC)", Label: "Rede Natura 2000 — ZEC", Present: false, Layer: "zec"},
 			{Type: "Perigosidade de incêndio rural", Label: "Perigosidade de Incêndio Rural", Present: false, Layer: "incendio"},
 		},
 		Regulation: &model.Regulation{
@@ -59,8 +59,8 @@ func TestBuildPayloadPartialConstraintGaps(t *testing.T) {
 	r := fixtureResult()
 	// Generic-adapter shape: only the national layers were evaluated.
 	r.Constraints = []model.ConstraintHit{
-		{Type: "Natura 2000 — ZPE", Present: false},
-		{Type: "Natura 2000 — ZEC", Present: false},
+		{Type: "Rede Natura 2000 (ZPE)", Present: false},
+		{Type: "Rede Natura 2000 (ZEC)", Present: false},
 		{Type: "Perigosidade de incêndio rural", Present: true},
 	}
 	p, err := BuildPointPayload(r)
@@ -90,6 +90,33 @@ func TestBuildPayloadPartialConstraintGaps(t *testing.T) {
 	}
 	if strings.Contains(joined, "Condicionantes municipais") {
 		t.Errorf("municipal constraints were evaluated — no municipal gap expected, got %v", p.DataGaps)
+	}
+}
+
+// TestBuildPayloadUnknownConstraintGaps: a probe that answered "unknown" is a
+// gap (the source has no data for this municipality), never an evaluation.
+func TestBuildPayloadUnknownConstraintGaps(t *testing.T) {
+	r := fixtureResult()
+	r.Constraints = []model.ConstraintHit{
+		{Type: "RAN", Present: false},
+		{Type: "REN", Unknown: true},
+		{Type: "Rede Natura 2000 (ZPE)", Present: false},
+		{Type: "Rede Natura 2000 (ZEC)", Present: false},
+		{Type: "Perigosidade de incêndio rural", Present: false},
+	}
+	p, err := BuildPointPayload(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	joined := strings.Join(p.DataGaps, "\n")
+	if !strings.Contains(joined, "REN: sem dados na fonte nacional") {
+		t.Errorf("expected an explicit REN unknown gap, got %v", p.DataGaps)
+	}
+	if !strings.Contains(joined, "Condicionantes municipais") {
+		t.Errorf("REN unknown must not count as evaluated, got %v", p.DataGaps)
+	}
+	if strings.Contains(joined, "Condicionantes nacionais") {
+		t.Errorf("national constraints were evaluated — no national gap expected, got %v", p.DataGaps)
 	}
 }
 

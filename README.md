@@ -46,12 +46,20 @@ only attributes come back):
   subtracted; municipalities missing from the national dataset answer
   **unknown**, never "no" — ~50 lack their REN in SNIT, 6 lack a published RAN,
   and Lisboa/Porto/Amadora genuinely have no RAN);
-- **Rede Natura 2000** (ZEC + ZPE) and **áreas protegidas (RNAP)** from the
-  same catalogue;
+- **áreas protegidas (RNAP)** from the same catalogue;
 - **albufeiras classificadas** (in-water and the statutory DL 107/2009
   protection belt, via true server-side distance queries) and the coastal
   **POC/POOC** areas, safeguard strips, digitized **POAAP** zonings and
   **PAAP** areas from APA/SNIAmb ArcGIS services.
+
+Two national servidões are evaluated as **geometry** rather than probes —
+their features are small enough to fetch bbox-filtered, which yields real
+overlap areas and percentages instead of a yes/no:
+
+- **Rede Natura 2000** (ZEC + ZPE) from the DGT SRUP collections;
+- the **rural fire hazard** chart (perigosidade de incêndio rural), keeping
+  only the *alta*/*muito alta* classes — the ones that actually restrict
+  building under SGIFR.
 
 On top of the live layers, every result lists the **special planning
 instruments** (planos/programas especiais — POAAP/PEAAP, POOC/POC, POE,

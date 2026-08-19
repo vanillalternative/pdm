@@ -3,6 +3,7 @@ package ai
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/bernardosimoes/pdm/internal/model"
 )
@@ -62,11 +63,18 @@ func buildPayload(kind string, result any, constraints []model.ConstraintHit, re
 // constraint that is absent is NOT a gap — only a constraint type that was
 // never checked is.
 func dataGaps(constraints []model.ConstraintHit, reg *model.Regulation) []string {
+	// Only hits that actually got an answer count as evaluated: an Unknown hit
+	// means the source was asked and could not answer for this municipality —
+	// that is a gap, not an evaluation.
 	evaluated := make(map[string]bool, len(constraints))
+	var gaps []string
 	for _, c := range constraints {
+		if c.Unknown {
+			gaps = append(gaps, c.Type+": sem dados na fonte nacional para este município — não avaliado.")
+			continue
+		}
 		evaluated[c.Type] = true
 	}
-	var gaps []string
 	switch {
 	case len(constraints) == 0:
 		gaps = append(gaps, "Condicionantes legais (RAN, REN, Rede Natura 2000, perigosidade de incêndio, servidões administrativas) não avaliadas — a análise baseia-se apenas na classificação de uso do solo (CRUS).")
@@ -74,7 +82,7 @@ func dataGaps(constraints []model.ConstraintHit, reg *model.Regulation) []string
 		if !evaluated["RAN"] || !evaluated["REN"] {
 			gaps = append(gaps, "Condicionantes municipais (RAN, REN, servidões locais do PDM) não avaliadas para este município — apenas as condicionantes de âmbito nacional foram verificadas.")
 		}
-		if !hasTypePrefix(evaluated, "Natura 2000") || !hasTypePrefix(evaluated, "Perigosidade") {
+		if !hasTypeContaining(evaluated, "Natura 2000") || !hasTypeContaining(evaluated, "Perigosidade") {
 			gaps = append(gaps, "Condicionantes nacionais (Rede Natura 2000, perigosidade de incêndio rural) não verificadas nesta análise.")
 		}
 	}
@@ -85,9 +93,13 @@ func dataGaps(constraints []model.ConstraintHit, reg *model.Regulation) []string
 	return gaps
 }
 
-func hasTypePrefix(evaluated map[string]bool, prefix string) bool {
+// hasTypeContaining reports whether any evaluated constraint type contains
+// sub. Substring (not prefix) matching, because the canonical type strings
+// vary in shape: "Rede Natura 2000 (ZEC)" from the national probes and srup
+// geometry layers vs adapter-specific variants.
+func hasTypeContaining(evaluated map[string]bool, sub string) bool {
 	for t := range evaluated {
-		if len(t) >= len(prefix) && t[:len(prefix)] == prefix {
+		if strings.Contains(t, sub) {
 			return true
 		}
 	}

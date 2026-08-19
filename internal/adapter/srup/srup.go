@@ -18,10 +18,13 @@ import (
 
 const itemsBase = "https://ogcapi.dgterritorio.gov.pt/collections"
 
-// Canonical constraint types, referenced by reports and data-gap logic.
+// Canonical constraint types. The Natura strings MUST match the ones the
+// national package uses for its presence probes: composeLayers dedupes by
+// constraint string, so a mismatch would double-report Natura (geometry layer
+// here + probe there) instead of letting the geometry win.
 const (
-	TypeZPE      = "Natura 2000 — ZPE"
-	TypeZEC      = "Natura 2000 — ZEC"
+	TypeZPE      = "Rede Natura 2000 (ZPE)"
+	TypeZEC      = "Rede Natura 2000 (ZEC)"
 	TypeIncendio = "Perigosidade de incêndio rural"
 )
 

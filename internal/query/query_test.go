@@ -306,6 +306,65 @@ func TestNationalRANUnknown(t *testing.T) {
 
 // TestInstrumentsPOACBInside: at a point inside the bundled POACB area, the
 // registry instrument for the Castelo do Bode plan is confirmed PointInside.
+// TestPointFireHazardGeometry: the rural fire hazard chart is an srup
+// geometry layer composed engine-side. Only the high classes count (the rest
+// are filtered out), a hit carries the tipologia detail, and the Natura
+// layers it brings must not duplicate the national probes (composeLayers
+// dedupes by constraint string).
+func TestPointFireHazardGeometry(t *testing.T) {
+	const square = `"geometry":{"type":"Polygon","coordinates":[[[-8.7,39.6],[-8.5,39.6],[-8.5,39.76],[-8.7,39.76],[-8.7,39.6]]]}`
+	const fireFC = `{"type":"FeatureCollection","features":[
+		{"type":"Feature","properties":{"tipologia":"Muito Alta"},` + square + `},
+		{"type":"Feature","properties":{"tipologia":"Baixa"},` + square + `}]}`
+	var seen []string
+	routes := append(genericRoutes(), stubRoute{"srup_perigosidade_inc_rural/items", fireFC})
+	eng := newEngineOpts(t, source.Options{Live: false, HTTP: stubClient(t, &seen, routes)})
+	res, err := eng.Point(context.Background(), -8.60, 39.68) // Ourém
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := findConstraint(res.Constraints, "Perigosidade de incêndio rural")
+	if c == nil || !c.Present {
+		t.Fatalf("expected a present fire-hazard constraint, got %+v", c)
+	}
+	if c.Detail != "Muito Alta" {
+		t.Errorf("expected the high-class tipologia as detail, got %q", c.Detail)
+	}
+	if !sawURLContaining(seen, "srup_perigosidade_inc_rural/items") {
+		t.Errorf("expected a fire-hazard fetch, got %v", seen)
+	}
+	for _, typ := range []string{"Rede Natura 2000 (ZEC)", "Rede Natura 2000 (ZPE)", "Perigosidade de incêndio rural"} {
+		n := 0
+		for _, cc := range res.Constraints {
+			if cc.Type == typ {
+				n++
+			}
+		}
+		if n != 1 {
+			t.Errorf("expected exactly one %q constraint (dedup), got %d in %+v", typ, n, res.Constraints)
+		}
+	}
+}
+
+// TestPointFireHazardLowClassFiltered: a location covered only by low hazard
+// classes must NOT flag the constraint — virtually the whole country carries
+// some class, only alta/muito alta restrict building.
+func TestPointFireHazardLowClassFiltered(t *testing.T) {
+	const lowFC = `{"type":"FeatureCollection","features":[
+		{"type":"Feature","properties":{"tipologia":"Baixa"},
+		"geometry":{"type":"Polygon","coordinates":[[[-8.7,39.6],[-8.5,39.6],[-8.5,39.76],[-8.7,39.76],[-8.7,39.6]]]}}]}`
+	routes := append(genericRoutes(), stubRoute{"srup_perigosidade_inc_rural/items", lowFC})
+	eng := newEngineOpts(t, source.Options{Live: false, HTTP: stubClient(t, nil, routes)})
+	res, err := eng.Point(context.Background(), -8.60, 39.68)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := findConstraint(res.Constraints, "Perigosidade de incêndio rural")
+	if c == nil || c.Present || c.Unknown {
+		t.Fatalf("expected fire hazard evaluated and absent (low class filtered), got %+v", c)
+	}
+}
+
 func TestInstrumentsPOACBInside(t *testing.T) {
 	res, err := newEngine(t).Point(shortCtx(t), -8.32522, 39.54334)
 	if err != nil {

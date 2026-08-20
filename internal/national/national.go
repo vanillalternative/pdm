@@ -241,6 +241,39 @@ func renProbe(name, code string, opts source.Options) source.Prober {
 	return source.OGCProbe(cfg, opts)
 }
 
+// snapshotOrLive composes an APA presence probe: the pdms snapshot store first
+// (a complete harvest of the national dataset, so its answers — including
+// empty ones — are authoritative), falling back to the live ArcGIS probe on
+// any snapshot failure. filter, when non-nil, post-filters snapshot hits and
+// stands in for the live probe's Where clause (the snapshot endpoint is
+// attribute-agnostic).
+func snapshotOrLive(dataset string, cfg source.ArcGISProbeConfig, opts source.Options,
+	filter func(spatial.Feature) bool) func(ctx context.Context, subject source.BBox) ([]spatial.Feature, model.Source, error) {
+	live := source.ArcGISProbe(cfg, opts)
+	if opts.SnapshotAPI == "" {
+		return live
+	}
+	snap := source.SnapshotProbe(source.SnapshotConfig{
+		BaseURL: opts.SnapshotAPI, Dataset: dataset, DistanceM: cfg.DistanceM, Meta: cfg.Meta,
+	}, opts)
+	return func(ctx context.Context, subject source.BBox) ([]spatial.Feature, model.Source, error) {
+		hits, src, err := snap(ctx, subject)
+		if err != nil {
+			return live(ctx, subject)
+		}
+		if filter != nil {
+			kept := make([]spatial.Feature, 0, len(hits))
+			for _, h := range hits {
+				if filter(h) {
+					kept = append(kept, h)
+				}
+			}
+			hits = kept
+		}
+		return hits, src, nil
+	}
+}
+
 // albufeiraProbe answers "is the subject on, or within the statutory
 // protection belt of, a classified albufeira de águas públicas" from APA's
 // national water-body layer. DL 107/2009 gives every classified albufeira a
@@ -250,19 +283,22 @@ func renProbe(name, code string, opts source.Options) source.Prober {
 func albufeiraProbe(opts source.Options) source.Prober {
 	layer := apa + "/Albufeiras_AguasPublicas/MapServer/0"
 	fields := []string{"nome", "classifica", "poaap", "legislacao"}
-	inWater := source.ArcGISProbe(source.ArcGISProbeConfig{
+	isAlqueva := func(h spatial.Feature) bool {
+		return strings.Contains(strings.ToUpper(h.Prop("nome")), "ALQUEVA")
+	}
+	inWater := snapshotOrLive("albufeiras", source.ArcGISProbeConfig{
 		LayerURL: layer, OutFields: fields,
 		Meta: model.Source{Name: "APA/SNIAmb — Albufeiras de águas públicas classificadas", Layer: "albufeiras"},
-	}, opts)
-	near500 := source.ArcGISProbe(source.ArcGISProbeConfig{
+	}, opts, nil)
+	near500 := snapshotOrLive("albufeiras", source.ArcGISProbeConfig{
 		LayerURL: layer, OutFields: fields, DistanceM: 500,
 		Meta: model.Source{Name: "APA/SNIAmb — Albufeiras de águas públicas classificadas", Layer: "albufeiras"},
-	}, opts)
-	near1000Alqueva := source.ArcGISProbe(source.ArcGISProbeConfig{
+	}, opts, nil)
+	near1000Alqueva := snapshotOrLive("albufeiras", source.ArcGISProbeConfig{
 		LayerURL: layer, OutFields: fields, DistanceM: 1000,
 		Where: "UPPER(nome) LIKE '%ALQUEVA%'",
 		Meta:  model.Source{Name: "APA/SNIAmb — Albufeiras de águas públicas classificadas", Layer: "albufeiras"},
-	}, opts)
+	}, opts, isAlqueva)
 
 	describe := func(h spatial.Feature) string {
 		d := h.Prop("nome")
@@ -315,14 +351,14 @@ func albufeiraProbe(opts source.Options) source.Prober {
 // APA's POC (programas, layer 0 = área de intervenção) and POOC (planos still
 // in force, with zonamento) services.
 func coastProbe(opts source.Options) source.Prober {
-	poc := source.ArcGISProbe(source.ArcGISProbeConfig{
+	poc := snapshotOrLive("poc-area", source.ArcGISProbeConfig{
 		LayerURL: apa + "/POC/MapServer/0", OutFields: []string{"poc", "legenda_1"},
 		Meta: model.Source{Name: "APA/SNIAmb — Programas da Orla Costeira (POC)", Layer: "poc"},
-	}, opts)
-	pooc := source.ArcGISProbe(source.ArcGISProbeConfig{
+	}, opts, nil)
+	pooc := snapshotOrLive("pooc", source.ArcGISProbeConfig{
 		LayerURL: apa + "/POOC/MapServer/0", OutFields: []string{"nome", "local", "zonamento"},
 		Meta: model.Source{Name: "APA/SNIAmb — Planos de Ordenamento da Orla Costeira (POOC)", Layer: "pooc"},
-	}, opts)
+	}, opts, nil)
 	return func(ctx context.Context, subject source.BBox) (source.Probed, error) {
 		var details []string
 		hits, src, err := poc(ctx, subject)
@@ -378,10 +414,10 @@ func coastBandsProbe(opts source.Options) source.Prober {
 	}
 	probes := make([]func(context.Context, source.BBox) ([]spatial.Feature, model.Source, error), len(bands))
 	for i, b := range bands {
-		probes[i] = source.ArcGISProbe(source.ArcGISProbeConfig{
+		probes[i] = snapshotOrLive(fmt.Sprintf("poc-faixa-%d", b.layer), source.ArcGISProbeConfig{
 			LayerURL: fmt.Sprintf("%s/POC/MapServer/%d", apa, b.layer),
 			Meta:     model.Source{Name: "APA/SNIAmb — POC, faixas de salvaguarda e zonas de proteção", Layer: "poc-salvaguarda"},
-		}, opts)
+		}, opts, nil)
 	}
 	return func(ctx context.Context, subject source.BBox) (source.Probed, error) {
 		var details []string
@@ -414,10 +450,10 @@ func coastBandsProbe(opts source.Options) source.Prober {
 // instruments registry names the plan applicable to each municipality either
 // way, so an empty answer here is complementary, not contradictory.
 func poaapProbe(opts source.Options) source.Prober {
-	probe := source.ArcGISProbe(source.ArcGISProbeConfig{
+	probe := snapshotOrLive("poaap", source.ArcGISProbeConfig{
 		LayerURL: apa + "/POAAP/MapServer/0", OutFields: []string{"nome", "zonamento", "tipo", "local"},
 		Meta: model.Source{Name: "APA/SNIAmb — POAAP (planos de albufeira digitalizados)", Layer: "poaap"},
-	}, opts)
+	}, opts, nil)
 	return func(ctx context.Context, subject source.BBox) (source.Probed, error) {
 		hits, src, err := probe(ctx, subject)
 		if err != nil {
@@ -450,10 +486,10 @@ func poaapProbe(opts source.Options) source.Prober {
 // paapProbe answers the área de intervenção of the new-generation programas
 // especiais de albufeira (currently only Foz Tua is approved and loaded).
 func paapProbe(opts source.Options) source.Prober {
-	probe := source.ArcGISProbe(source.ArcGISProbeConfig{
+	probe := snapshotOrLive("paap", source.ArcGISProbeConfig{
 		LayerURL: apa + "/PAAP_Sniamb/MapServer/1", OutFields: []string{"paap", "fase_situacao"},
 		Meta: model.Source{Name: "APA/SNIAmb — Programas de Albufeira (PAAP)", Layer: "paap"},
-	}, opts)
+	}, opts, nil)
 	return func(ctx context.Context, subject source.BBox) (source.Probed, error) {
 		hits, src, err := probe(ctx, subject)
 		if err != nil {

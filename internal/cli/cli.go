@@ -490,6 +490,9 @@ func buildEngine(opts options) (*query.Engine, error) {
 	if so.TruthAPI, err = boot.ValidateTruthAPI(truthAPI); err != nil {
 		return nil, err
 	}
+	// The snapshot store lives on the same server as the truth mirror; one
+	// URL configures both (and --truth-api= disables both).
+	so.SnapshotAPI = so.TruthAPI
 	eng := query.New(resolver, so)
 	// Freguesia labelling is optional — a broken dataset must not block queries.
 	if freguesias != nil {

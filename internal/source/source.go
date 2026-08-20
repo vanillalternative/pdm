@@ -52,6 +52,12 @@ type Options struct {
 	// TruthAPI is the base URL of the pdms truth-mirror server (empty = mirror
 	// disabled). Consulted for recorded zoning before the official sources.
 	TruthAPI string
+	// SnapshotAPI is the base URL of the pdms snapshot store (usually the same
+	// server as TruthAPI, empty = disabled). Consulted for complete national
+	// constraint datasets (APA albufeiras/coastal layers) before the official
+	// ArcGIS services; kept separate from TruthAPI so paid reports can disable
+	// the second-hand zoning mirror while still using first-party snapshots.
+	SnapshotAPI string
 	// Subject is the exact query geometry (WGS84). The truth mirror answers only
 	// when its recorded polygons demonstrably cover the subject; the zero value
 	// makes the mirror always miss — conservative by construction.

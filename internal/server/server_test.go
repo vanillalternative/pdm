@@ -262,14 +262,18 @@ func TestValidationContract(t *testing.T) {
 	}
 }
 
-// TestTruthToggle: truth=off must never contact the configured mirror, and the
-// per-request toggle must not leak between requests (the daemon reuses one
-// base options value).
+// TestTruthToggle: truth=off must never contact the configured mirror's
+// zoning endpoint, and the per-request toggle must not leak between requests
+// (the daemon reuses one base options value). Only /api/truth/zoning counts:
+// the snapshot constraints endpoint is deliberately still consulted under
+// truth=off (see TestSnapshotToggle).
 func TestTruthToggle(t *testing.T) {
 	pinFastFetch(t)
 	var hits atomic.Int64
 	mirror := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		hits.Add(1)
+		if strings.HasPrefix(r.URL.Path, "/api/truth/zoning") {
+			hits.Add(1)
+		}
 		http.NotFound(w, r)
 	}))
 	defer mirror.Close()
@@ -301,6 +305,44 @@ func TestTruthToggle(t *testing.T) {
 	get("off")
 	if n := hits.Load(); n > 2 {
 		t.Fatalf("truth=off after truth=on leaked mirror calls (total %d)", n)
+	}
+}
+
+// TestSnapshotToggle: snapshot=off must keep every request away from the
+// configured store's constraints endpoint, independently of truth=on|off.
+func TestSnapshotToggle(t *testing.T) {
+	pinFastFetch(t)
+	var constraintHits atomic.Int64
+	store := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/api/truth/constraints") {
+			constraintHits.Add(1)
+		}
+		http.NotFound(w, r)
+	}))
+	defer store.Close()
+
+	ts := newTestServer(t, server.Config{TruthAPI: store.URL})
+
+	get := func(params string) {
+		t.Helper()
+		res, err := http.Get(ts.URL + "/v1/report?lat=39.60&lon=-8.41&no_cache=1&" + params)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer res.Body.Close()
+		if res.StatusCode != 200 {
+			t.Fatalf("status = %d", res.StatusCode)
+		}
+		_, _ = io.Copy(io.Discard, res.Body)
+	}
+
+	get("truth=off&snapshot=off")
+	if n := constraintHits.Load(); n != 0 {
+		t.Fatalf("snapshot=off contacted the constraints endpoint %d times", n)
+	}
+	get("truth=off&snapshot=on")
+	if n := constraintHits.Load(); n == 0 {
+		t.Fatalf("snapshot=on with truth=off never consulted the constraints endpoint")
 	}
 }
 

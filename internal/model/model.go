@@ -43,6 +43,12 @@ const (
 	// zoning polygons recorded by this tool's own past official queries — a fast
 	// local re-serve of previously fetched official data, not a fresh fetch.
 	ProvenanceRecordedMirror Provenance = "recorded-mirror"
+	// ProvenanceOfficialSnapshot means served from the pdms web store's complete
+	// snapshot of an official national dataset, harvested in bulk from the
+	// official service and stamped with its harvest date. Unlike the recorded
+	// mirror (partial by construction), a snapshot covers the whole dataset, so
+	// an empty answer is a real "no", not a data gap.
+	ProvenanceOfficialSnapshot Provenance = "official-snapshot"
 )
 
 // Source is an attribution record for a piece of data used in a result.

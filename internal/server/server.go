@@ -79,7 +79,7 @@ func New(cfg Config) (*Server, error) {
 	if err != nil {
 		return nil, err
 	}
-	base := source.Options{Cache: c, TruthAPI: cfg.TruthAPI}
+	base := source.Options{Cache: c, TruthAPI: cfg.TruthAPI, SnapshotAPI: cfg.TruthAPI}
 	if err := boot.FetchOptionsFromEnv(&base); err != nil {
 		return nil, err
 	}
@@ -153,16 +153,17 @@ func writeErr(w http.ResponseWriter, status int, format string, args ...any) {
 // reportParams are the request-scoped knobs that used to be per-process CLI
 // flags and env vars.
 type reportParams struct {
-	format  report.Format
-	truthOn bool
-	live    bool
-	noCache bool
-	opts    source.Options
+	format     report.Format
+	truthOn    bool
+	snapshotOn bool
+	live       bool
+	noCache    bool
+	opts       source.Options
 }
 
 func (s *Server) parseReportParams(r *http.Request) (reportParams, error) {
 	q := r.URL.Query()
-	p := reportParams{format: report.FormatNDJSON, truthOn: true}
+	p := reportParams{format: report.FormatNDJSON, truthOn: true, snapshotOn: true}
 	if v := q.Get("format"); v != "" {
 		f, err := report.ParseFormat(v)
 		if err != nil {
@@ -177,6 +178,15 @@ func (s *Server) parseReportParams(r *http.Request) (reportParams, error) {
 	default:
 		return p, fmt.Errorf("invalid truth %q (use on or off)", q.Get("truth"))
 	}
+	// snapshot is independent of truth: paid reports disable the second-hand
+	// zoning mirror (truth=off) but still use first-party dataset snapshots.
+	switch q.Get("snapshot") {
+	case "", "on":
+	case "off":
+		p.snapshotOn = false
+	default:
+		return p, fmt.Errorf("invalid snapshot %q (use on or off)", q.Get("snapshot"))
+	}
 	p.live = boolParam(q.Get("live"))
 	p.noCache = boolParam(q.Get("no_cache"))
 
@@ -187,6 +197,9 @@ func (s *Server) parseReportParams(r *http.Request) (reportParams, error) {
 	}
 	if !p.truthOn {
 		opts.TruthAPI = ""
+	}
+	if !p.snapshotOn {
+		opts.SnapshotAPI = ""
 	}
 	if v := q.Get("attempt_timeout_s"); v != "" {
 		seconds, err := strconv.ParseFloat(v, 64)

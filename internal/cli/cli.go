@@ -6,21 +6,19 @@ package cli
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
-	"net/url"
 	"os"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/bernardosimoes/pdm/data"
 	"github.com/bernardosimoes/pdm/internal/admin"
 	"github.com/bernardosimoes/pdm/internal/ai"
-	"github.com/bernardosimoes/pdm/internal/cache"
+	"github.com/bernardosimoes/pdm/internal/boot"
 	"github.com/bernardosimoes/pdm/internal/mapview"
+	"github.com/bernardosimoes/pdm/internal/munidoc"
 	"github.com/bernardosimoes/pdm/internal/planos"
 	"github.com/bernardosimoes/pdm/internal/query"
 	"github.com/bernardosimoes/pdm/internal/registry"
@@ -44,6 +42,8 @@ USAGE:
   pdm supported                   show municipality coverage/support levels
   pdm municipalities              list every municipality as JSON (name, code,
                                   district, centroid, bbox, regulamento, plans)
+  pdm serve [--listen addr]       run as a persistent localhost HTTP daemon
+                                  (engine built once; see /v1/report)
   pdm version                     print version
   pdm help                        show this help
 
@@ -59,6 +59,8 @@ OPTIONS:
                                   official sources for point queries on generic
                                   municipalities (--live bypasses it; also set via
                                   the PDM_TRUTH_API env var; --truth-api= disables)
+  --listen <addr>                 serve: listen address (default 127.0.0.1:8787;
+                                  also set via the PDM_LISTEN env var)
 
 EXAMPLES:
   pdm 39.60 -8.41
@@ -86,6 +88,7 @@ type options struct {
 	// env var set.
 	truthAPI    string
 	truthAPISet bool
+	listen      string
 }
 
 // Run parses args (excluding the program name) and executes, returning an exit
@@ -117,6 +120,8 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		return runSupported(stdout, stderr)
 	case "municipalities":
 		return runMunicipalities(stdout, stderr)
+	case "serve":
+		return runServe(opts, stdout, stderr)
 	case "point":
 		return runPoint(rest, opts, stdout, stderr)
 	case "polygon":
@@ -176,120 +181,20 @@ func runSupported(stdout, stderr io.Writer) int {
 	return 0
 }
 
-// muniDoc is the JSON document emitted by `pdm municipalities`. Its shape is a
-// contract consumed by server.js — keep the field names stable.
-type muniDoc struct {
-	Count          int         `json:"count"`
-	Municipalities []muniEntry `json:"municipalities"`
-}
-
-type muniEntry struct {
-	Name         string            `json:"name"`
-	Code         string            `json:"code"`
-	District     string            `json:"district"`
-	Centroid     muniCentroid      `json:"centroid"`
-	BBox         [4]float64        `json:"bbox"` // minLon, minLat, maxLon, maxLat
-	Regulamento  *muniRegulamento  `json:"regulamento"`
-	SpecialPlans []muniSpecialPlan `json:"special_plans"`
-}
-
-type muniCentroid struct {
-	Lat float64 `json:"lat"`
-	Lon float64 `json:"lon"`
-}
-
-type muniRegulamento struct {
-	Reference string `json:"reference"`
-	URL       string `json:"url"`
-	Articles  int    `json:"articles"`
-	Status    string `json:"status"`
-}
-
-type muniSpecialPlan struct {
-	Name    string `json:"name"`
-	Kind    string `json:"kind"`
-	State   string `json:"state"`
-	Diploma string `json:"diploma"`
-}
-
 // runMunicipalities emits every municipality in the CAOP boundary dataset as a
-// single JSON document, joining three bundled sources: administrative
-// boundaries (name/code/district/centroid/bbox), the parsed-regulamento
-// coverage manifest (keyed by dtcc), and the special-plans registry (by name).
+// single JSON document (see internal/munidoc — the shape is a wire contract
+// consumed by server.js).
 func runMunicipalities(stdout, stderr io.Writer) int {
 	resolver, err := admin.NewResolver(data.Municipalities)
 	if err != nil {
 		fmt.Fprintf(stderr, "error: load administrative boundaries: %v\n", err)
 		return 1
 	}
-	regByCode := loadRegulamentoIndex()
-
-	list := resolver.List()
-	doc := muniDoc{Count: len(list), Municipalities: make([]muniEntry, 0, len(list))}
-	for _, m := range list {
-		entry := muniEntry{
-			Name:         m.Name,
-			Code:         m.Code,
-			District:     m.District,
-			Centroid:     muniCentroid{Lat: m.CentroidLat, Lon: m.CentroidLon},
-			BBox:         m.BBox,
-			SpecialPlans: []muniSpecialPlan{},
-		}
-		if r, ok := regByCode[m.Code]; ok {
-			r := r
-			entry.Regulamento = &r
-		}
-		for _, ins := range planos.ForMunicipality(m.Name) {
-			entry.SpecialPlans = append(entry.SpecialPlans, muniSpecialPlan{
-				Name:    ins.Name,
-				Kind:    ins.Kind,
-				State:   ins.State,
-				Diploma: ins.Diploma,
-			})
-		}
-		doc.Municipalities = append(doc.Municipalities, entry)
-	}
-
-	enc := json.NewEncoder(stdout)
-	enc.SetEscapeHTML(false)
-	enc.SetIndent("", "  ")
-	if err := enc.Encode(doc); err != nil {
-		fmt.Fprintf(stderr, "error: encoding municipalities: %v\n", err)
+	if err := munidoc.Encode(stdout, munidoc.Build(resolver)); err != nil {
+		fmt.Fprintf(stderr, "error: %v\n", err)
 		return 1
 	}
 	return 0
-}
-
-// loadRegulamentoIndex reads the bundled regulamentos coverage manifest and
-// returns it keyed by dtcc. A missing or unparsable manifest yields an empty
-// map (every municipality then reports a null regulamento).
-func loadRegulamentoIndex() map[string]muniRegulamento {
-	out := map[string]muniRegulamento{}
-	b, err := data.Regulamentos.ReadFile("regulamentos/index.json")
-	if err != nil {
-		return out
-	}
-	var idx struct {
-		Municipalities []struct {
-			DTCC         string `json:"dtcc"`
-			Reference    string `json:"reference"`
-			URL          string `json:"url"`
-			ArticleCount int    `json:"article_count"`
-			Status       string `json:"status"`
-		} `json:"municipalities"`
-	}
-	if err := json.Unmarshal(b, &idx); err != nil {
-		return out
-	}
-	for _, m := range idx.Municipalities {
-		out[m.DTCC] = muniRegulamento{
-			Reference: m.Reference,
-			URL:       m.URL,
-			Articles:  m.ArticleCount,
-			Status:    m.Status,
-		}
-	}
-	return out
 }
 
 func runPoint(args []string, opts options, stdout, stderr io.Writer) int {
@@ -412,52 +317,16 @@ func loadInput(path string) (geom.Geometry, error) {
 	return spatial.LoadInputGeometry(path)
 }
 
-// emitter writes NDJSON events: one compact JSON object per line, mutex-guarded
-// because layer events are emitted from concurrent evaluation goroutines.
-type emitter struct {
-	mu  sync.Mutex
-	enc *json.Encoder
-}
-
-func newEmitter(w io.Writer) *emitter {
-	enc := json.NewEncoder(w)
-	enc.SetEscapeHTML(false)
-	return &emitter{enc: enc}
-}
-
-func (e *emitter) emit(v any) {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	_ = e.enc.Encode(v) // Encode appends the newline
-}
-
-// streamReport runs a query in NDJSON streaming mode: the engine emits meta and
-// per-layer events as they complete, the locator map is generated concurrently,
-// and the complete result is the terminal event — so one process yields what
-// previously took separate json and html runs.
+// streamReport runs a query in NDJSON streaming mode (see query.StreamNDJSON,
+// shared with `pdm serve`): the engine emits meta and per-layer events as they
+// complete, the locator map is generated concurrently, and the complete result
+// is the terminal event — so one process yields what previously took separate
+// json and html runs.
 func streamReport(stdout, stderr io.Writer, run func(query.Emit) (any, error), buildMap func() *mapview.Data) int {
-	em := newEmitter(stdout)
-	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		if buildMap == nil {
-			return
-		}
-		if m := buildMap(); m != nil {
-			if svg := m.SVG(); svg != "" {
-				em.emit(query.MapEvent{Event: "map", HTML: svg})
-			}
-		}
-	}()
-	res, err := run(em.emit)
-	wg.Wait() // the terminal event must be last
-	if err != nil {
-		em.emit(query.ErrorEvent{Event: "error", Error: err.Error()})
+	if err := query.StreamNDJSON(stdout, run, buildMap); err != nil {
 		fmt.Fprintf(stderr, "error: %v\n", err)
 		return 1
 	}
-	em.emit(query.ResultEvent{Event: "result", Data: res})
 	return 0
 }
 
@@ -602,65 +471,35 @@ func isFloat(s string) bool {
 }
 
 func buildEngine(opts options) (*query.Engine, error) {
-	resolver, err := admin.NewResolver(data.Municipalities)
+	resolver, freguesias, err := boot.LoadResolvers()
 	if err != nil {
-		return nil, fmt.Errorf("load administrative boundaries: %w", err)
+		return nil, err
 	}
-	c, err := cache.New(cache.Options{
-		Dir:      opts.cacheDir,
-		TTL:      7 * 24 * time.Hour,
-		Disabled: opts.noCache,
-	})
+	c, err := boot.NewCache(opts.cacheDir, opts.noCache)
 	if err != nil {
-		return nil, fmt.Errorf("init cache: %w", err)
+		return nil, err
 	}
 	so := source.Options{Live: opts.live, Cache: c}
-	if s := strings.TrimSpace(os.Getenv("PDM_FETCH_TIMEOUT_SECONDS")); s != "" {
-		seconds, err := strconv.ParseFloat(s, 64)
-		if err != nil || seconds <= 0 {
-			return nil, fmt.Errorf("invalid PDM_FETCH_TIMEOUT_SECONDS %q", s)
-		}
-		so.AttemptTimeout = time.Duration(seconds * float64(time.Second))
+	if err := boot.FetchOptionsFromEnv(&so); err != nil {
+		return nil, err
 	}
-	if s := strings.TrimSpace(os.Getenv("PDM_FETCH_MAX_ATTEMPTS")); s != "" {
-		attempts, err := strconv.Atoi(s)
-		if err != nil || attempts <= 0 {
-			return nil, fmt.Errorf("invalid PDM_FETCH_MAX_ATTEMPTS %q", s)
-		}
-		so.MaxAttempts = attempts
-	}
-	truthAPI := strings.TrimSpace(os.Getenv("PDM_TRUTH_API"))
+	truthAPI := os.Getenv("PDM_TRUTH_API")
 	if opts.truthAPISet {
-		truthAPI = strings.TrimSpace(opts.truthAPI)
+		truthAPI = opts.truthAPI
 	}
-	if truthAPI != "" {
-		u, err := url.Parse(truthAPI)
-		if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" ||
-			u.RawQuery != "" || u.Fragment != "" {
-			return nil, fmt.Errorf("invalid truth-mirror URL %q (--truth-api flag or PDM_TRUTH_API env var): expected http(s)://host[/path] with no query or fragment", truthAPI)
-		}
-		so.TruthAPI = strings.TrimRight(truthAPI, "/")
+	if so.TruthAPI, err = boot.ValidateTruthAPI(truthAPI); err != nil {
+		return nil, err
 	}
 	eng := query.New(resolver, so)
 	// Freguesia labelling is optional — a broken dataset must not block queries.
-	if fr, err := admin.NewFreguesiaResolver(data.Freguesias); err == nil {
-		eng.SetFreguesias(fr)
+	if freguesias != nil {
+		eng.SetFreguesias(freguesias)
 	}
 	return eng, nil
 }
 
 func validateLatLon(lat, lon float64) error {
-	if lat < -90 || lat > 90 {
-		return fmt.Errorf("latitude %.5f out of range [-90, 90]", lat)
-	}
-	if lon < -180 || lon > 180 {
-		return fmt.Errorf("longitude %.5f out of range [-180, 180]", lon)
-	}
-	// Gentle sanity hint for swapped lat/lon in the Portuguese context.
-	if lat < 0 && lon > 0 {
-		return fmt.Errorf("coordinates look swapped: expected <lat> <lon> (Portugal: lat ~37..42, lon ~-9..-6)")
-	}
-	return nil
+	return spatial.ValidateLatLon(lat, lon)
 }
 
 func fileExists(p string) bool {
@@ -714,6 +553,12 @@ func parse(args []string, opts *options) ([]string, error) {
 				}
 				opts.truthAPI = v
 				opts.truthAPISet = true
+			case "listen":
+				v, err := needValue(name, val, hasInline, args, &i)
+				if err != nil {
+					return nil, err
+				}
+				opts.listen = v
 			case "live":
 				opts.live = true
 			case "no-cache":

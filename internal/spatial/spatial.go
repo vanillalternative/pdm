@@ -34,6 +34,22 @@ func Point(lon, lat float64) geom.Geometry {
 	return geom.XY{X: lon, Y: lat}.AsPoint().AsGeometry()
 }
 
+// ValidateLatLon range-checks a WGS84 coordinate and rejects the common
+// swapped lat/lon mistake in the Portuguese context.
+func ValidateLatLon(lat, lon float64) error {
+	if lat < -90 || lat > 90 {
+		return fmt.Errorf("latitude %.5f out of range [-90, 90]", lat)
+	}
+	if lon < -180 || lon > 180 {
+		return fmt.Errorf("longitude %.5f out of range [-180, 180]", lon)
+	}
+	// Gentle sanity hint for swapped lat/lon in the Portuguese context.
+	if lat < 0 && lon > 0 {
+		return fmt.Errorf("coordinates look swapped: expected <lat> <lon> (Portugal: lat ~37..42, lon ~-9..-6)")
+	}
+	return nil
+}
+
 // Prop returns the first present, non-empty property among keys (case- and
 // space-insensitive match), rendered as a trimmed string.
 func (f Feature) Prop(keys ...string) string {

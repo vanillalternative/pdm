@@ -13,6 +13,7 @@ import (
 	"github.com/bernardosimoes/pdm/internal/adapter/generic"
 	"github.com/bernardosimoes/pdm/internal/adapter/mafra"
 	"github.com/bernardosimoes/pdm/internal/adapter/ourem"
+	"github.com/bernardosimoes/pdm/internal/adapter/pombal"
 	"github.com/bernardosimoes/pdm/internal/adapter/tomar"
 
 	"golang.org/x/text/runes"
@@ -29,6 +30,7 @@ func register(a adapter.Adapter) {
 func init() {
 	register(mafra.New())
 	register(ourem.New())
+	register(pombal.New())
 	register(tomar.New())
 }
 

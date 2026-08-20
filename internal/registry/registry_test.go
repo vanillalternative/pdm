@@ -61,3 +61,10 @@ func TestMafraHasDedicatedAdapter(t *testing.T) {
 		t.Fatalf("Mafra should resolve to its dedicated adapter, got %q/%v", a.Municipality(), dedicated)
 	}
 }
+
+func TestPombalHasDedicatedAdapter(t *testing.T) {
+	a, dedicated := Resolve("Pombal", "1015")
+	if !dedicated || a.Municipality() != "Pombal" {
+		t.Fatalf("Pombal should resolve to its dedicated adapter, got %q/%v", a.Municipality(), dedicated)
+	}
+}

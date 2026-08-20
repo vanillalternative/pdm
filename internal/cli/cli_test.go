@@ -210,7 +210,14 @@ func TestRunMunicipalitiesContract(t *testing.T) {
 				Lat float64 `json:"lat"`
 				Lon float64 `json:"lon"`
 			} `json:"centroid"`
-			BBox        []float64 `json:"bbox"`
+			BBox   []float64 `json:"bbox"`
+			Tier   string    `json:"tier"`
+			Layers []struct {
+				ID       string `json:"id"`
+				Kind     string `json:"kind"`
+				Scope    string `json:"scope"`
+				Geometry bool   `json:"geometry"`
+			} `json:"layers"`
 			Regulamento *struct {
 				Reference string `json:"reference"`
 				URL       string `json:"url"`
@@ -237,8 +244,30 @@ func TestRunMunicipalitiesContract(t *testing.T) {
 		if m.Centroid == nil || len(m.BBox) != 4 {
 			t.Fatalf("entry %s missing centroid/bbox", m.Name)
 		}
+		if m.Tier != "dedicated" && m.Tier != "generic" {
+			t.Fatalf("entry %s has tier %q, want dedicated|generic", m.Name, m.Tier)
+		}
+		if len(m.Layers) == 0 {
+			t.Fatalf("entry %s announces no layers", m.Name)
+		}
+		var zoning bool
+		for _, l := range m.Layers {
+			if l.ID == "" || (l.Kind != "zoning" && l.Kind != "constraint") ||
+				(l.Scope != "municipal" && l.Scope != "national") {
+				t.Fatalf("entry %s has malformed layer %+v", m.Name, l)
+			}
+			if l.Kind == "zoning" {
+				zoning = true
+			}
+		}
+		if !zoning {
+			t.Errorf("entry %s announces no zoning layer", m.Name)
+		}
 		if m.Code == "1418" {
 			tomar = true
+			if m.Tier != "dedicated" {
+				t.Errorf("Tomar must be tier dedicated, got %q", m.Tier)
+			}
 			if m.Regulamento == nil || m.Regulamento.Articles == 0 || m.Regulamento.Reference == "" {
 				t.Errorf("Tomar must carry its parsed regulamento, got %+v", m.Regulamento)
 			}

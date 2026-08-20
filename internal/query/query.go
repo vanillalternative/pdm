@@ -551,6 +551,15 @@ func composeLayers(ad adapter.Adapter, name, code string, opts source.Options) [
 	return append(layers, national.Layers(name, code, opts, skip)...)
 }
 
+// AnnouncedLayers is the composed layer set a query for this municipality
+// would announce in its MetaEvent: the adapter's own layers plus the national
+// geometry and probe layers, deduped by constraint. Construction is pure —
+// loaders and probes are lazy — so callers may describe coverage without
+// touching the network.
+func AnnouncedLayers(ad adapter.Adapter, name, code string, opts source.Options) []adapter.Layer {
+	return composeLayers(ad, name, code, opts)
+}
+
 // geometryLayers is the drawable layer set: the adapter's own layers plus the
 // national SRUP geometry layers (Rede Natura 2000 ZPE/ZEC, rural fire hazard),
 // deduped by constraint string. The geometry layers come before the national

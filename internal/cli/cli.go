@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/bernardosimoes/pdm/data"
+	"github.com/bernardosimoes/pdm/internal/adapter"
 	"github.com/bernardosimoes/pdm/internal/admin"
 	"github.com/bernardosimoes/pdm/internal/ai"
 	"github.com/bernardosimoes/pdm/internal/cache"
@@ -43,7 +44,8 @@ USAGE:
   pdm analyse <file.geojson|lat lon> [--tier ...]    AI-written analysis report
   pdm supported                   show municipality coverage/support levels
   pdm municipalities              list every municipality as JSON (name, code,
-                                  district, centroid, bbox, regulamento, plans)
+                                  district, centroid, bbox, tier, layers,
+                                  regulamento, plans)
   pdm version                     print version
   pdm help                        show this help
 
@@ -189,8 +191,21 @@ type muniEntry struct {
 	District     string            `json:"district"`
 	Centroid     muniCentroid      `json:"centroid"`
 	BBox         [4]float64        `json:"bbox"` // minLon, minLat, maxLon, maxLat
+	Tier         string            `json:"tier"` // "dedicated" | "generic"
+	Layers       []muniLayer       `json:"layers"`
 	Regulamento  *muniRegulamento  `json:"regulamento"`
 	SpecialPlans []muniSpecialPlan `json:"special_plans"`
+}
+
+// muniLayer is one announced planning layer: what a query for this
+// municipality will evaluate, described without touching the network.
+type muniLayer struct {
+	ID         string `json:"id"`
+	Title      string `json:"title"`
+	Kind       string `json:"kind"` // "zoning" | "constraint"
+	Constraint string `json:"constraint,omitempty"`
+	Scope      string `json:"scope"`    // "municipal" (dedicated adapter's own source) | "national"
+	Geometry   bool   `json:"geometry"` // true: real overlap geometry; false: server-side probe
 }
 
 type muniCentroid struct {
@@ -234,6 +249,33 @@ func runMunicipalities(stdout, stderr io.Writer) int {
 			Centroid:     muniCentroid{Lat: m.CentroidLat, Lon: m.CentroidLon},
 			BBox:         m.BBox,
 			SpecialPlans: []muniSpecialPlan{},
+		}
+		ad, dedicated := registry.Resolve(m.Name, m.Code)
+		entry.Tier = "generic"
+		if dedicated {
+			entry.Tier = "dedicated"
+		}
+		layerOpts := source.Options{Live: true}
+		own := len(ad.Layers(layerOpts))
+		composed := query.AnnouncedLayers(ad, m.Name, m.Code, layerOpts)
+		entry.Layers = make([]muniLayer, 0, len(composed))
+		for i, l := range composed {
+			kind := "zoning"
+			if l.Kind == adapter.KindConstraint {
+				kind = "constraint"
+			}
+			scope := "national"
+			if dedicated && i < own {
+				scope = "municipal"
+			}
+			entry.Layers = append(entry.Layers, muniLayer{
+				ID:         l.ID,
+				Title:      l.Title,
+				Kind:       kind,
+				Constraint: l.Constraint,
+				Scope:      scope,
+				Geometry:   l.Probe == nil,
+			})
 		}
 		if r, ok := regByCode[m.Code]; ok {
 			r := r

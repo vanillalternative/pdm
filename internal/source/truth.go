@@ -1,7 +1,8 @@
 // The truth-mirror loader. The pdms web store records the zoning polygons
 // returned by past official queries in PostGIS and re-serves them over a small
-// JSON API. Consulting that mirror first answers repeat point queries without
-// touching the (slow, periodically overloaded) official geoservices. The
+// JSON API. Consulting that mirror first answers repeat point and parcel
+// queries without touching the (slow, periodically overloaded) official
+// geoservices. The
 // mirror is only ever a shortcut, never an authority of its own: any outcome
 // that is not a demonstrated hit — unconfigured, no subject, network error,
 // bad payload, empty result, or no feature actually covering the subject — is
@@ -22,6 +23,7 @@ import (
 
 	"github.com/bernardosimoes/pdm/internal/model"
 	"github.com/bernardosimoes/pdm/internal/spatial"
+	"github.com/peterstace/simplefeatures/geom"
 )
 
 // TruthConfig describes one truth-mirror zoning request.
@@ -55,9 +57,13 @@ func FromTruthMirror(f spatial.Feature) bool {
 type truthEnvelope struct {
 	RecordedFrom []string `json:"recorded_from"`
 	UpdatedAt    string   `json:"updated_at"`
+	Count        int      `json:"count"`
+	NextAfter    any      `json:"next_after"`
 }
 
-// Truth returns a loader over the pdms truth mirror for a point query. It
+// Truth returns a loader over the pdms truth mirror for a point or polygon
+// query. Polygon answers are accepted only when one complete mirror page
+// covers the full subject; otherwise the official-source fallback runs. It
 // performs exactly one attempt, never touches the disk cache, and errors on
 // every outcome that is not a verified hit (see package comment).
 func Truth(cfg TruthConfig, opts Options) Loader {
@@ -65,13 +71,9 @@ func Truth(cfg TruthConfig, opts Options) Loader {
 		if cfg.BaseURL == "" || cfg.Code == "" {
 			return Loaded{}, fmt.Errorf("not configured: %w", ErrTruthMiss)
 		}
-		pt, ok := opts.Subject.AsPoint()
-		if !ok {
-			return Loaded{}, fmt.Errorf("subject is not a point: %w", ErrTruthMiss)
-		}
-		xy, ok := pt.XY()
-		if !ok {
-			return Loaded{}, fmt.Errorf("subject point is empty: %w", ErrTruthMiss)
+		pt, isPoint := opts.Subject.AsPoint()
+		if opts.Subject.IsEmpty() {
+			return Loaded{}, fmt.Errorf("subject is empty: %w", ErrTruthMiss)
 		}
 		base, err := url.Parse(cfg.BaseURL)
 		if err != nil {
@@ -80,8 +82,29 @@ func Truth(cfg TruthConfig, opts Options) Loader {
 		u := base.JoinPath("api", "truth", "zoning")
 		q := url.Values{}
 		q.Set("code", cfg.Code)
-		q.Set("lat", strconv.FormatFloat(xy.Y, 'f', -1, 64))
-		q.Set("lon", strconv.FormatFloat(xy.X, 'f', -1, 64))
+		if cfg.Meta.Layer != "" {
+			q.Set("layer", cfg.Meta.Layer)
+		}
+		if isPoint {
+			xy, ok := pt.XY()
+			if !ok {
+				return Loaded{}, fmt.Errorf("subject point is empty: %w", ErrTruthMiss)
+			}
+			q.Set("lat", strconv.FormatFloat(xy.Y, 'f', -1, 64))
+			q.Set("lon", strconv.FormatFloat(xy.X, 'f', -1, 64))
+		} else {
+			min, max, ok := opts.Subject.Envelope().MinMaxXYs()
+			if !ok {
+				return Loaded{}, fmt.Errorf("subject has no envelope: %w", ErrTruthMiss)
+			}
+			q.Set("bbox", strings.Join([]string{
+				strconv.FormatFloat(min.X, 'f', -1, 64),
+				strconv.FormatFloat(min.Y, 'f', -1, 64),
+				strconv.FormatFloat(max.X, 'f', -1, 64),
+				strconv.FormatFloat(max.Y, 'f', -1, 64),
+			}, ","))
+			q.Set("limit", "1000")
+		}
 		// Any query/fragment on the configured base is discarded — the request
 		// must target the API path even if a sloppy base slipped past validation.
 		u.RawQuery = q.Encode()
@@ -118,18 +141,36 @@ func Truth(cfg TruthConfig, opts Options) Loader {
 		if len(feats) == 0 {
 			return Loaded{}, fmt.Errorf("no features recorded here: %w", ErrTruthMiss)
 		}
-		// Defense in depth: the server applies containment with an interior
-		// margin, but a partial mirror must never answer for a point its recorded
-		// polygons do not demonstrably cover.
-		covered := false
-		for _, f := range feats {
-			if spatial.Intersects(opts.Subject, f.Geometry) {
-				covered = true
-				break
-			}
+		var doc struct {
+			PDMS *truthEnvelope `json:"pdms"`
 		}
-		if !covered {
-			return Loaded{}, fmt.Errorf("recorded polygons do not cover the point: %w", ErrTruthMiss)
+		_ = json.Unmarshal(body, &doc)
+		// Defense in depth: point mode checks containment again. Polygon mode
+		// additionally requires an unpaginated response and proves that the
+		// union of recorded zoning polygons covers every part of the parcel.
+		if isPoint {
+			covered := false
+			for _, f := range feats {
+				if spatial.Intersects(opts.Subject, f.Geometry) {
+					covered = true
+					break
+				}
+			}
+			if !covered {
+				return Loaded{}, fmt.Errorf("recorded polygons do not cover the point: %w", ErrTruthMiss)
+			}
+		} else {
+			if doc.PDMS == nil || doc.PDMS.Count != len(feats) || doc.PDMS.NextAfter != nil {
+				return Loaded{}, fmt.Errorf("recorded polygon page is incomplete: %w", ErrTruthMiss)
+			}
+			geoms := make([]geom.Geometry, 0, len(feats))
+			for _, f := range feats {
+				geoms = append(geoms, f.Geometry)
+			}
+			union, err := spatial.UnionAll(geoms)
+			if err != nil || !spatial.Covers(union, opts.Subject) {
+				return Loaded{}, fmt.Errorf("recorded polygons do not fully cover the parcel: %w", ErrTruthMiss)
+			}
 		}
 		for i := range feats {
 			if feats[i].Props == nil {
@@ -142,10 +183,7 @@ func Truth(cfg TruthConfig, opts Options) Loader {
 		m.Provenance = model.ProvenanceRecordedMirror
 		now := timeNow()
 		m.RetrievedAt = &now
-		var doc struct {
-			PDMS *truthEnvelope `json:"pdms"`
-		}
-		if json.Unmarshal(body, &doc) == nil && doc.PDMS != nil {
+		if doc.PDMS != nil {
 			if len(doc.PDMS.RecordedFrom) > 0 {
 				m.Name += " (orig.: " + strings.Join(doc.PDMS.RecordedFrom, ", ") + ")"
 			}

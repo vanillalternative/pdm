@@ -35,6 +35,17 @@ func truthOpts(subjectLon, subjectLat float64) Options {
 	return Options{Subject: spatial.Point(subjectLon, subjectLat)}
 }
 
+func truthPolygon(t *testing.T, minLon, minLat, maxLon, maxLat float64) Options {
+	t.Helper()
+	g, err := spatial.ParseInputGeometry([]byte(fmt.Sprintf(
+		`{"type":"Polygon","coordinates":[[[%g,%g],[%g,%g],[%g,%g],[%g,%g],[%g,%g]]]}`,
+		minLon, minLat, maxLon, minLat, maxLon, maxLat, minLon, maxLat, minLon, minLat)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return Options{Subject: g}
+}
+
 func truthCfg(baseURL string) TruthConfig {
 	return TruthConfig{
 		BaseURL: baseURL,
@@ -88,6 +99,56 @@ func TestTruthGapMiss(t *testing.T) {
 	_, err := Truth(truthCfg(srv.URL), truthOpts(-8.3, 39.7))(context.Background())
 	if !errors.Is(err, ErrTruthMiss) {
 		t.Fatalf("a feature set not covering the point must be ErrTruthMiss, got %v", err)
+	}
+}
+
+func TestTruthPolygonHitRequiresCompleteCoverage(t *testing.T) {
+	var sawQuery string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		sawQuery = r.URL.Path + "?" + r.URL.RawQuery
+		fmt.Fprint(w, truthFC)
+	}))
+	defer srv.Close()
+
+	loaded, err := Truth(truthCfg(srv.URL), truthPolygon(t, -8.35, 39.65, -8.25, 39.75))(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"/api/truth/zoning?", "bbox=", "code=1411", "layer=ordenamento", "limit=1000"} {
+		if !strings.Contains(sawQuery, want) {
+			t.Errorf("request %q missing %q", sawQuery, want)
+		}
+	}
+	if strings.Contains(sawQuery, "lat=") || strings.Contains(sawQuery, "lon=") {
+		t.Errorf("polygon request must use bbox, got %q", sawQuery)
+	}
+	if len(loaded.Features) != 1 || !FromTruthMirror(loaded.Features[0]) {
+		t.Fatalf("expected one marked mirror feature, got %+v", loaded.Features)
+	}
+}
+
+func TestTruthPolygonPartialCoverageMisses(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, truthFC)
+	}))
+	defer srv.Close()
+
+	_, err := Truth(truthCfg(srv.URL), truthPolygon(t, -8.35, 39.65, -8.15, 39.75))(context.Background())
+	if !errors.Is(err, ErrTruthMiss) {
+		t.Fatalf("partial polygon coverage must be ErrTruthMiss, got %v", err)
+	}
+}
+
+func TestTruthPolygonPaginatedResponseMisses(t *testing.T) {
+	const paged = `{"type":"FeatureCollection","features":[{"type":"Feature","properties":{"class":"Solo rústico"},"geometry":{"type":"Polygon","coordinates":[[[-8.4,39.6],[-8.2,39.6],[-8.2,39.8],[-8.4,39.8],[-8.4,39.6]]]}}],"pdms":{"count":1,"next_after":42}}`
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, paged)
+	}))
+	defer srv.Close()
+
+	_, err := Truth(truthCfg(srv.URL), truthPolygon(t, -8.35, 39.65, -8.25, 39.75))(context.Background())
+	if !errors.Is(err, ErrTruthMiss) {
+		t.Fatalf("paginated polygon response must be ErrTruthMiss, got %v", err)
 	}
 }
 

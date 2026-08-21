@@ -56,8 +56,8 @@ OPTIONS:
   --no-cache                      do not read/write the local cache
   --cache-dir <dir>               override the cache directory
   --truth-api <url>               pdms recorded-zoning mirror, consulted before the
-                                  official sources for point queries on generic
-                                  municipalities (--live bypasses it; also set via
+                                  official sources for point and fully covered parcel
+                                  queries on generic municipalities (--live bypasses it; set via
                                   the PDM_TRUTH_API env var; --truth-api= disables)
   --listen <addr>                 serve: listen address (default 127.0.0.1:8787;
                                   also set via the PDM_LISTEN env var)

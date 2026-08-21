@@ -229,6 +229,18 @@ func Intersects(a, b geom.Geometry) (result bool) {
 	return geom.Intersects(a, b)
 }
 
+// Covers reports whether every point of b lies in a (guarded against panics
+// and topology errors on malformed public geometries).
+func Covers(a, b geom.Geometry) (result bool) {
+	defer func() {
+		if recover() != nil {
+			result = false
+		}
+	}()
+	covered, err := geom.Covers(a, b)
+	return err == nil && covered
+}
+
 // Coverage returns the union of (subject ∩ f) over all features — the part of
 // subject actually covered by the feature set, with overlaps collapsed.
 // Features whose intersection fails are skipped. Returns an empty geometry when

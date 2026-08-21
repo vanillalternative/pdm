@@ -228,9 +228,10 @@ func (e *Engine) PolygonStream(ctx context.Context, g geom.Geometry, emit Emit) 
 	opts := e.opts
 	bb := geomBBox(g, 0.005)
 	opts.BBox = &bb
-	// The mirror never serves polygon queries: the store cannot prove full
-	// parcel coverage, so every parcel goes to the official sources.
-	opts.TruthAPI = ""
+	// The truth loader accepts a recorded polygon answer only after proving the
+	// complete parcel is covered; a partial mirror remains an ordinary miss and
+	// falls through to the official source.
+	opts.Subject = g
 
 	collector := newSourceSet()
 	confidence := ad.BaseConfidence()

@@ -289,9 +289,9 @@ func TestPointTruthMirrorLiveBypasses(t *testing.T) {
 	}
 }
 
-// TestPolygonTruthMirrorBypassed: the mirror never serves parcel queries (the
-// store cannot prove full parcel coverage).
-func TestPolygonTruthMirrorBypassed(t *testing.T) {
+// TestPolygonTruthMirrorHit: a recorded feature that demonstrably covers the
+// complete parcel answers without contacting CRUS.
+func TestPolygonTruthMirrorHit(t *testing.T) {
 	var seen []string
 	eng := newEngineOpts(t, source.Options{
 		Live: false, HTTP: stubClient(t, &seen, fzRoutes(fzTruthHit)),
@@ -301,14 +301,17 @@ func TestPolygonTruthMirrorBypassed(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if sawURLContaining(seen, "/api/truth/") {
-		t.Errorf("polygon queries must never consult the mirror, got %v", seen)
+	if !sawURLContaining(seen, "/api/truth/zoning", "bbox=") {
+		t.Errorf("polygon query must consult the mirror by bbox, got %v", seen)
 	}
-	if !sawURLContaining(seen, "collections/crus/items") {
-		t.Errorf("expected the CRUS request, got %v", seen)
+	if sawURLContaining(seen, "collections/crus/items") {
+		t.Errorf("a complete mirror hit must not contact CRUS, got %v", seen)
 	}
-	if len(res.Zoning) != 1 || res.Zoning[0].Label != "Solo Rústico - Espaços Florestais" {
+	if len(res.Zoning) != 1 || res.Zoning[0].Label != "Solo rústico — Espaços florestais (registado)" {
 		t.Fatalf("unexpected zoning: %+v", res.Zoning)
+	}
+	if !hasNoteContaining(res.Notes, "espelho local pdms") {
+		t.Errorf("expected mirror note, got %v", res.Notes)
 	}
 }
 

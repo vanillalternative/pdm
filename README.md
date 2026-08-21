@@ -114,7 +114,7 @@ Options:
 | `--live` | fetch fresh data from the official geoservices (falls back to bundled) |
 | `--no-cache` | do not read/write the local cache |
 | `--cache-dir <dir>` | override the cache directory |
-| `--truth-api <url>` | base URL of the pdms recorded-zoning mirror, consulted before the official CRUS source for point queries on generic municipalities (`--live` bypasses it; `--truth-api=` disables even when the env var is set) |
+| `--truth-api <url>` | base URL of the pdms recorded-zoning mirror, consulted before the official CRUS source for point and fully covered parcel queries on generic municipalities (`--live` bypasses it; `--truth-api=` disables even when the env var is set) |
 
 **Coordinates are `latitude longitude`, WGS84 decimal degrees.** Portuguese
 longitudes are negative (west of Greenwich) — `pdm 39.60 -8.41` works; the parser
@@ -281,7 +281,7 @@ GeoJSON) over WMS/raster/PDF.
 | Municipality boundaries (all mainland) | DGT **CAOP** (`municipios`) | OGC API Features |
 | Freguesia boundaries (all mainland) | DGT **CAOP** (`freguesias`) | OGC API Features |
 | Zoning, any mainland municipality (classificação e qualificação do solo) | DGT **CRUS** | OGC API Features |
-| Zoning, recorded mirror (point queries, generic municipalities) | pdms web store — PostGIS mirror of this tool's past official CRUS answers | JSON API (`/api/truth/zoning`) |
+| Zoning, recorded mirror (point and fully covered parcel queries, generic municipalities) | pdms web store — PostGIS mirror of this tool's past official CRUS answers | JSON API (`/api/truth/zoning`) |
 | Rede Natura 2000 — ZPE + ZEC (national) | DGT/SNIT **SRUP** (`srup_zpe`, `srup_zec`) | OGC API Features |
 | Perigosidade de incêndio rural, classes alta/muito alta (national) | DGT/SNIT **SRUP** (`srup_perigosidade_inc_rural`) | OGC API Features |
 | RAN (Reserva Agrícola Nacional) — Tomar | DGT/SNIT **SRUP** | OGC API Features |
@@ -300,16 +300,17 @@ live from CRUS (filtered to the municipality code and the query bbox) and
 cached, `--live` or not.
 
 When a **truth mirror** is configured (`--truth-api` / `PDM_TRUTH_API`), it is
-consulted before CRUS — but only for point queries on generic municipalities,
-and only as a shortcut, never as an authority. The mirror answers exclusively
-when its recorded polygons demonstrably cover the query point (the server
-applies containment with an interior margin and the CLI re-checks the
-intersection); every gap, error, empty answer, or timeout falls through to the
-official source, so a partial mirror can never produce a false "no zoning".
+consulted before CRUS for point and parcel queries on generic municipalities,
+and only as a shortcut, never as an authority. For points, the mirror answers
+only when a recorded polygon demonstrably covers the coordinate (the server
+also applies an interior margin). For parcels, the CLI requests the parcel bbox,
+rejects incomplete/paginated responses, and proves that the union of recorded
+polygons covers the complete parcel. Every gap, error, empty answer, or timeout
+falls through to the official source, so a partial mirror can never produce a
+false "no zoning".
 Results served from it carry `recorded-mirror` provenance, are capped at
 medium confidence, and carry an explanatory note. `--live` bypasses the mirror
-entirely, and polygon queries never use it (the store cannot prove full parcel
-coverage).
+entirely.
 
 ### Regenerating the bundled snapshot
 
